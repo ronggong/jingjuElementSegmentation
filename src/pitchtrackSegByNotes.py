@@ -2,6 +2,9 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import os
+from utilFunc import pitch2midi
+
 
 class pitchtrackSegByNotes(object):
 
@@ -13,15 +16,30 @@ class pitchtrackSegByNotes(object):
         self.max = 0
         self.min = 0
 
+        self.reset()
+
+    def reset(self):
+        self.noteStartEndFrame = []
         self.pitchtrackByNotes = []
 
     def noteEndFrameHelper(self, notePitchtrack, startDur):
+
+        notePitchtrack = np.abs(notePitchtrack)
+        notePitchtrack = pitch2midi(notePitchtrack)  # convert to midi note
 
         self.pitchtrackByNotes.append([notePitchtrack,startDur])
         notePitchtrack = []
         startDur = [0, 0]
 
         return notePitchtrack, startDur
+
+    def minMaxPitchtrack(self, pitchtrack):
+
+        ptPositive = [item for item in pitchtrack if item > 0]
+        self.max = max(ptPositive)
+        self.min = min(ptPositive)
+
+        return
 
     def doSegmentation(self, pitchtrack, monoNoteOut):
 
@@ -35,9 +53,7 @@ class pitchtrackSegByNotes(object):
         '''
 
         # get the max and min values of pitch track
-        ptPositive = [item for item in pitchtrack if item > 0]
-        self.max = max(ptPositive)
-        self.min = min(ptPositive)
+        self.minMaxPitchtrack(pitchtrack)
 
         # initialisation
         jj = 0
@@ -102,12 +118,15 @@ class pitchtrackSegByNotes(object):
         # doSegmentationFunction for pYin vamp plugin exported
         # pitchtrack and monoNote
 
+        self.reset()
+
         frameStartingTime, pitchtrack = self.readPyinPitchtrack(pitchtrack_filename)
         noteStartingTime, noteDurTime = self.readPyinMonoNoteOut(monoNoteOut_filename)
 
-        ptPositive = [item for item in pitchtrack if item > 0]
-        self.max = max(ptPositive)
-        self.min = min(ptPositive)
+        self.minMaxPitchtrack(pitchtrack)
+
+        pitchtrack = np.abs(pitchtrack)
+        pitchtrack = pitch2midi(pitchtrack)
 
         noteEndingTime = noteStartingTime+noteDurTime
 
@@ -123,6 +142,8 @@ class pitchtrackSegByNotes(object):
         for ii in range(len(noteStartingIndex)):
             notePitchtrack = pitchtrack[noteStartingIndex[ii]:(noteEndingIndex[ii]+1)]
             startDur = [noteStartingIndex[ii],noteEndingIndex[ii]-noteStartingIndex[ii]+1]
+
+            self.noteStartEndFrame.append([noteStartingIndex[ii],noteEndingIndex[ii]])
             self.pitchtrackByNotes.append([notePitchtrack.tolist(), startDur])
 
         return
@@ -134,6 +155,9 @@ class pitchtrackSegByNotes(object):
         :param startDur: [starting frame, duration frame]
         :return:
         '''
+
+        if not os.path.exists(figFolder):
+            os.makedirs(figFolder)
 
         jj = 1
         for ii in self.pitchtrackByNotes:
@@ -147,7 +171,7 @@ class pitchtrackSegByNotes(object):
 
             plt.figure()
             plt.plot(frameRange, np.abs(notePitchtrack))
-            plt.ylabel('pitch hz')
+            plt.ylabel('midi note number, 69: A4')
             plt.xlabel('frame')
             plt.title('starting time: ' + str(startingTime) +
                       ' duration: ' + str(durTime))
@@ -158,6 +182,7 @@ class pitchtrackSegByNotes(object):
 
             if saveFig == True:
                 plt.savefig(figFolder+str(jj)+'.png')
+                plt.close()
             jj += 1
 
         if saveFig == False:
