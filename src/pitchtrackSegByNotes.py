@@ -143,7 +143,9 @@ class pitchtrackSegByNotes(object):
             notePitchtrack = pitchtrack[noteStartingIndex[ii]:(noteEndingIndex[ii]+1)]
             startDur = [noteStartingIndex[ii],noteEndingIndex[ii]-noteStartingIndex[ii]+1]
 
-            self.noteStartEndFrame.append([noteStartingIndex[ii],noteEndingIndex[ii]])
+            noteStartingFrame = int(noteStartingTime[ii]*(44100/256))
+            noteEndingFrame = int(noteEndingTime[ii]*(44100/256))
+            self.noteStartEndFrame.append([noteStartingFrame,noteEndingFrame])
             self.pitchtrackByNotes.append([notePitchtrack.tolist(), startDur])
 
         return

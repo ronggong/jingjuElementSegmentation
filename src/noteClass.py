@@ -1,8 +1,9 @@
-import os
+import os,json
 import numpy as np
 import matplotlib.pyplot as plt
 import utilFunc as uf
 import statsmodels.api as smapi
+import pitchtrackSegByNotes
 from scipy.signal import argrelextrema
 
 
@@ -15,8 +16,13 @@ class noteClass(object):
         #  unClassifiedClass: 5
         self.unClassifiedNoteClasses = ['flat+semiVibrato', 'semiVibrato+flat',
                                         'semiVibrato+flat+semiVibrato', 'nonClassified']
-        self.samplerate = 44100
-        self.hopsize = 256
+
+        self.segmentClasses = {'linear':0, 'vibrato':2, 'other':1}
+
+        self.featureNamesDict = {'0':'slope','1':'intercept','2':'rsquared','3':'polyVar','4':'standard deviation',
+                                 '5':'extrema amount','6':'contour length','7':'fitting curve zero crossing','8':'vibrato frequency'}
+        self.samplerate = 44100.0
+        self.hopsize = 256.0
         self.resetLocalMinMax()
         self.resetDiffExtrema()
         self.resetSegments()
@@ -90,6 +96,9 @@ class noteClass(object):
         # use statsmodel do linear regression, 1-d.
         # this implementation can detect outliers easily
 
+        if len(x)-1-1 <= 0:
+            return None,None,None
+
         X = smapi.add_constant(x, prepend=False)        #  add intercept
         '''
         mod = smapi.RLM(y, X)
@@ -119,8 +128,10 @@ class noteClass(object):
             yinterp = np.interp(x, xr, yr)                         #  linear interpolation outliers
 
             regression = smapi.OLS(yinterp,X).fit()               #  fit model
+        else:
+            yinterp = y
 
-        return regression.params, regression.rsquared
+        return regression.params, regression.rsquared, yinterp
 
         # print regression.params
         # print regression.rsquared
@@ -155,13 +166,7 @@ class noteClass(object):
 
         return var
 
-    def vibFreq(self, y, deg):
-
-        if len(y) <= deg+1:  #  don't calculate the vib freq if it's too short
-            return
-
-        # calculate the vib frequency
-        # y should not be the pitch track without normalizing
+    def polyfitResiduals(self,y,deg):
 
         x = np.linspace(0,1,len(y))
         p = self.pitchContourFit(x, y, deg)         #  use higher degrees curve fitting
@@ -169,9 +174,31 @@ class noteClass(object):
         residuals = y-pc(x)                         #  residuals of curve fitting
         residuals = residuals-np.mean(residuals)    #  DC remove
 
+        return residuals
+
+    def vibFreq(self, y, deg):
+
+        if len(y) <= deg+1:  #  not calculating the vib freq if it's too short
+            return None, None
+
+        # calculate the vib frequency
+        # y should not be the pitch track without normalizing
+
+        residuals = self.polyfitResiduals(y,deg)
+
         freq = uf.vibFreq(residuals, self.samplerate, self.hopsize)
 
-        return freq
+        return freq, residuals
+
+    def vibExt(self, residuals, vibRate):
+
+        if residuals is None:
+            return
+
+        ext = uf.vibExt(residuals, self.samplerate, self.hopsize, vibRate)
+
+        return ext
+
 
     ######################################## minima and maxima treatment ###############################################
 
@@ -181,11 +208,16 @@ class noteClass(object):
 
         self.resetLocalMinMax()
 
+        leny = len(y)
         # smooth the signal
-        if box_pts is None:
-            n = int(len(y)/10)
+        # print box_pts,len(y)
+        if box_pts is None:             # detail segmentation box
+            n = int(leny/10)
             box_pts = 3 if n<3 else n
-        if box_pts < len(y):
+        if leny>52 and box_pts>=leny:   # segment > 0.3s but box is too large
+            n = int(leny/5)
+            box_pts = n
+        if box_pts < leny:
             self.ySmooth = uf.smooth(y, box_pts)
         half_box_pts = np.ceil(box_pts/2.0)
 
@@ -193,18 +225,40 @@ class noteClass(object):
             # for local maxima
             self.maximaInd = argrelextrema(self.ySmooth, np.greater)
             # remove the boundary effect of convolve
-            self.maximaInd = [mi for mi in self.maximaInd[0] if (mi>half_box_pts and mi<len(y)-half_box_pts)]
+            self.maximaInd = [mi for mi in self.maximaInd[0] if (mi>half_box_pts and mi<leny-half_box_pts)]
 
             # for local minima
             self.minimaInd = argrelextrema(self.ySmooth, np.less)
             # remove the boundary effect of convolve
-            self.minimaInd = [mi for mi in self.minimaInd[0] if (mi>half_box_pts and mi<len(y)-half_box_pts)]
+            self.minimaInd = [mi for mi in self.minimaInd[0] if (mi>half_box_pts and mi<leny-half_box_pts)]
 
         return box_pts
 
+    def extremaAmount(self):
+        return len(self.minimaInd)+len(self.maximaInd)
+
+    def fittingcurveCrossing(self,x,y,p):
+
+        #  zero crossing fitting curve version
+
+        if p is None:
+            return
+
+        pc = np.poly1d(p)
+        yhat = pc(x)
+
+        fcc = 0
+        for ii in range(len(x)-1):
+            if y[ii]-yhat[ii]>0 and y[ii+1]-yhat[ii+1]<=0:  #  from + to -
+                fcc += 1
+            if y[ii]-yhat[ii]<0 and y[ii+1]-yhat[ii+1]>=0:  #  from - to +
+                fcc += 1
+
+        return fcc
+
     def diffExtrema(self, x, y):
 
-        #  the absolute difference of amplitudes of consecutive extremas
+        #  the absolute amplitudes difference of consecutive extremas
 
         self.resetDiffExtrema()
 
@@ -265,7 +319,7 @@ class noteClass(object):
 
     def segmentPointDetection1(self, threshold):
 
-        #  detection of the segmentation point by setting a general y-axis threshold
+        #  detection of the segmentation point by extrema cumulation
 
         # threshold /= len(diffFusion)
         #print threshold
@@ -350,14 +404,16 @@ class noteClass(object):
 
         self.resetRefinedNotePts()
 
-        if len(self.segments):
+        if len(self.segments):                              #  note segmented by extremas
             extrema = np.array(self.extrema)
             segments = extrema[self.segments]
             segments = np.insert(segments, 0, 0)
-            segments = np.append(segments, len(notePt)-1)
+            segments = np.append(segments, len(notePt))
             for ii in range(1,len(segments)):
                 pt = notePt[segments[ii-1]:segments[ii]]
                 self.refinedNotePts.append(pt)
+        else:                                               #  no extremas
+            self.refinedNotePts.append(notePt)
 
 
     def pltNotePtFc(self, x, y, p, rsquare, vibFreq, saveFig=False, figFolder='./', figNumber=0):
@@ -374,7 +430,6 @@ class noteClass(object):
         f, ax = plt.subplots()
         ax.plot(x, y, 'b.', label='note pitchtrack')
         if len(self.ySmooth):
-            print x, self.ySmooth
             ax.plot(x, self.ySmooth, 'b--', label='smoothed pitchtrack')
 
         if p is not None:
@@ -441,7 +496,7 @@ class noteClass(object):
             plt.show()
 
 
-    def pltRefinedNotePtFc(self, x, y, p, rsquare, vibFreq, saveFig=False, figFolder='./', figNumber=0):
+    def pltRefinedNotePtFc(self, x, y, p, rsquare, polyVar, vibFreq, saveFig=False, figFolder='./', figNumber=0):
 
         '''
         plot the pitchtrack and the fitting curve
@@ -474,7 +529,7 @@ class noteClass(object):
         # axarr[0].legend(loc='best')
         ax.set_ylabel('normed midinote number')
         # plt.xlabel('frame')
-        ax.set_title('rsquare: '+str(rsquare)+'vibratoFreq: '+str(vibFreq))
+        ax.set_title('rsquare: '+str(rsquare)+'polyVar'+str(polyVar)+'vibratoFreq: '+str(vibFreq))
 
         if saveFig==True:
             plt.savefig(figFolder+str(figNumber)+'.png')
@@ -482,3 +537,123 @@ class noteClass(object):
 
         if saveFig==False:
             plt.show()
+
+    def featureExtractionProcess(self,rpt,sbp,curvefittingDeg):
+
+        # feature extraction part used in noteSegmentationFeatureExtraction(self, ...)
+
+        xRpt, yRpt = self.normalizeNotePt(rpt)                               #  normalise x to [0,1], remove y DC
+        self.localMinMax(yRpt,sbp)                                           #  local minima and extrema of pitch track
+                                                                            #  use the same smooth pts as before
+        # p = nc1.pitchContourFit(xRpt, yRpt, curvefittingDeg)              #  curve fitting
+        # rsquare = nc1.polyfitRsquare(xRpt, yRpt, p)                       #  polynomial fitting coefs
+
+        p, rsquare, yinterp = self.pitchContourLMBySM(xRpt,yRpt)             #  1 degree curve fitting statsmodels
+
+        polyVar = self.polyfitVariance(xRpt,yinterp,p)                       #  variance of fitting curve
+        standardd = np.std(yRpt,dtype=np.float64)                            #  standard deviation
+        extAmo = self.extremaAmount()                                        #  extrema amount
+        contourLen = len(xRpt)                                              #  contour length
+        fcc = self.fittingcurveCrossing(xRpt,yinterp,p)                      #  fitting curve crossing
+        vibFreq,residuals = self.vibFreq(rpt, curvefittingDeg)                         #  vibrato frequence
+
+        # featureVec = np.append(p,[rsquare,vibFreq])
+        featureVec = np.append(p,[rsquare,polyVar,standardd,extAmo,contourLen,fcc,vibFreq])  #  test different feature vector
+        extrema = sorted(self.minimaInd+self.maximaInd)
+
+        return featureVec,extrema
+
+    def noteSegmentationFeatureExtraction(self,pitchtrackNoteFolderPath,featureVecFolderPath,recordingNames,predict=False):
+
+        '''
+        This process will do    1) segment pitchtrack into notes which boundaries are given by pYIN
+                                2) refined segmentation searching stable part
+                                3) calculate features on refined segments
+        :param pitchtrackNoteFolderPath:
+        :param featureVecFolderPath:
+        :param recordingNames:
+        :param predict:
+        :return: refined segments boundaries, refined segments pitch contours
+        '''
+
+        ############################################## segmentation ########################################################
+        # below two lines will do segmentaion on calculation the pyin
+        # ptSeg = pitchtrackSegByNotes.pitchtrackSegByNotes(samplingFreq, frameSize, hopSize)
+        # ptSeg.doSegmentation(pitchtrack, fs.m_oMonoNoteOut)
+
+        ptSeg = pitchtrackSegByNotes.pitchtrackSegByNotes()
+
+        for rn in recordingNames:
+            pitchtrack_filename = pitchtrackNoteFolderPath+rn+'_pitchtrack.txt'
+            monoNoteOut_filename = pitchtrackNoteFolderPath+rn+'_monoNoteOut.txt'
+
+            ptSeg.doSegmentationForPyinVamp(pitchtrack_filename, monoNoteOut_filename)
+
+            # ptSeg.pltNotePitchtrack(saveFig=True, figFolder='../jingjuSegPic/laosheng/train/male_13/pos_3_midinote/')
+
+        ###################### calculate the polynomial fitting coefs and vibrato frequency ############################
+        #  use pitch track ptseg.pitchtrackByNotes from last step
+
+            featureDict = {}                                    # feature vectors dictionary
+            segmentsExport = {}                                 # refined segmentation boundaries
+            refinedPitchcontours = {}                           # refined pitch contours
+            extremas = {}                                       # extremas
+            curvefittingDeg = 1
+            jj = 1
+            jjj = 1
+            for ii in range(len(ptSeg.pitchtrackByNotes)):
+                pt = ptSeg.pitchtrackByNotes[ii][0]
+                pt = np.array(pt, dtype=np.float32)
+                x, y = self.normalizeNotePt(pt)                  #  normalise x to [0,1], remove y DC
+                sbp = self.localMinMax(y)                        #  local minima and extrema of pitch track
+                self.diffExtrema(x,y)                            #  the amplitude difference of minima and extrema
+                self.segmentPointDetection1(0.20)
+
+                if predict:
+                    # construct the segments frame vector: frame boundary of segments
+                    noteStartFrame = ptSeg.noteStartEndFrame[ii][0]
+                    noteEndFrame = ptSeg.noteStartEndFrame[ii][1]
+
+                    extremaInd = np.array(self.extrema)
+                    segmentsInd = extremaInd[self.segments]+noteStartFrame
+                    segmentsInd = np.insert(segmentsInd,0,noteStartFrame)
+                    segmentsInd = np.append(segmentsInd,noteEndFrame)     # +2 for sonicVisualizer alignment
+                    # segmentsExport[jjj] = str(segmentsInd)
+                    for kk in range(len(segmentsInd)-1):
+                        segmentsExport[jjj] = [segmentsInd[kk],segmentsInd[kk+1]]
+                        jjj += 1
+
+                #  nc1.segmentPointDetection2()  # segmentation point
+                self.segmentRefinement(pt)                                               # do the refined segmentation
+                #print self.refinedNotePts
+
+                for rpt in self.refinedNotePts:
+                    print jj
+
+                    refinedPitchcontours[jj] = rpt.tolist()
+                    featureVec,extrema = self.featureExtractionProcess(rpt,sbp,curvefittingDeg)
+                    featureDict[jj] = featureVec.tolist()
+                    extremas[jj] = extrema
+
+                    #  this plot step is slow, if we only want the features, we can comment this line
+                    #nc1.pltRefinedNotePtFc(xRpt, yRpt, p, rsquare, polyVar, vibFreq, saveFig=True,
+                    #                        figFolder='../jingjuSegPic/laosheng/train/refinedSegmentCurvefit/'+rn+'_curvefit_refined/',
+                    #                        figNumber = jj)
+                    jj += 1
+
+            featureFilename = featureVecFolderPath+rn+'.json'
+            with open(featureFilename, 'w') as outfile:
+                json.dump(featureDict, outfile)
+
+            if predict:
+
+                # output segments boundary frames pitch contours
+
+                outJsonDict = {'refinedPitchcontours':refinedPitchcontours,'boundary':segmentsExport,'extremas':extremas}
+                with open('./pYinOut/laosheng/predict/'+rn+'_refinedSegmentFeatures.json', "w") as outfile:
+                    json.dump(outJsonDict,outfile)
+                    # for se in segmentsExport:
+                    #     # outfile.write(str(int(se[0]))+'\t'+str(se[1])+'\n')
+                    #     outfile.write(str(se)+'\n')
+
+

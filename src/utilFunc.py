@@ -17,6 +17,17 @@ def pitch2midi(pitchtrack):
 
     return midi
 
+def midi2pitch(miditrack):
+    #  convert midi note number to pitch in hz
+
+    flag = False
+    if not isinstance(miditrack, np.ndarray):
+        miditrack = np.array(miditrack)
+        flag = True
+
+    pitchtrack = np.exp((miditrack-69.0)/12.0*np.log(2.0))*440.0
+
+    return pitchtrack
 
 def vibFreq(pitchtrack, sp, hopsize):
     '''
@@ -41,6 +52,22 @@ def vibFreq(pitchtrack, sp, hopsize):
     freqs = locs*(fftSize/2+1)*sampleRate/fftSize
 
     return freqs[0]
+
+def vibExt(pitchtrack, sp, hopsize, vibRate):
+
+    frameTime = 1.5/vibRate
+    sampleRate = sp/hopsize
+    frameSize = int(round(frameTime*sampleRate))
+    if len(pitchtrack)>frameSize:
+        extents = []
+        for jj in range(0,len(pitchtrack)-frameSize,int(round(frameSize/2))):
+            frame = pitchtrack[jj:jj+frameSize]
+            extents.append(max(frame)-min(frame))
+        ext = np.mean(extents)
+    else:
+        ext = max(pitchtrack)-min(pitchtrack)
+
+    return ext
 
 def smooth(y, box_pts):
     box = np.ones(box_pts)/box_pts

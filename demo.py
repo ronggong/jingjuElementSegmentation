@@ -6,8 +6,6 @@ import time
 import json
 import shutil
 import random
-import operator
-from sklearn import neighbors
 
 # add pYin src path
 pYinPath = '../pypYIN/src'
@@ -23,6 +21,9 @@ import pitchtrackSegByNotes
 import essentia.standard as ess
 import numpy as np
 import noteClass as nc
+import featureVecTarget as fvt
+import trainTestKNN as ttknn
+import refinedSegmentsManipulation as rsm
 from vibrato import vibrato
 
 if __name__ == "__main__":
@@ -69,226 +70,68 @@ if __name__ == "__main__":
 
     '''
 
-    ############################################## segmentation ########################################################
+    pitchtrackNoteTrainFolderPath = './pYinOut/laosheng/train/'
+    pitchContourClassificationModelName = './pYinOut/laosheng/train/model/pitchContourClassificationModel.pkl'
+    groundtruthNoteLevelPath = '/Users/gong/Documents/pycharmProjects/jingjuSegPic/laosheng/train/pyinNoteCurvefit/classified'
+    groundtruthNoteDetailPath = '/Users/gong/Documents/pycharmProjects/jingjuSegPic/laosheng/train/refinedSegmentCurvefit/classified'
+    featureVecTrainFolderPath = './pYinOut/laosheng/train/featureVec/'
+    targetTrainFolderPath = './pYinOut/laosheng/train/target/'
 
-    # ptSeg = pitchtrackSegByNotes.pitchtrackSegByNotes(samplingFreq, frameSize, hopSize)
+    pitchtrackNotePredictFolderPath = './pYinOut/laosheng/predict/'
+    featureVecPredictFolderPath = './pYinOut/laosheng/predict/featureVec/'
+    targetPredictFolderPath = './pYinOut/laosheng/predict/target/'
 
-    ptSeg = pitchtrackSegByNotes.pitchtrackSegByNotes()
 
-    #ptSeg.doSegmentation(pitchtrack, fs.m_oMonoNoteOut)
+    recordingNamesTrain = ['male_02_neg_1', 'male_12_neg_1', 'male_12_pos_1', 'male_13_pos_1', 'male_13_pos_3']
+    # recordingNamesPredict = ['neg_1','weiguojia']
+    recordingNamesPredict = ['weiguojia_section_pro','weiguojia_section_amateur']
 
+    # recordingNames = ['male_02_neg_1', 'male_12_neg_1']
+
+    '''
+    ############################################## train process #######################################################
+    # WARNING!!! don't run train process ANY MORE!!! because the segmentRefinement function is not the same ANY MORE!
+    # If this is ran, we need MANUALLY re-prepare the training groundtruch!!! This will take several days!!!
+    ######## segmentation and features ########
     nc1 = nc.noteClass()
+    nc1.noteSegmentationFeatureExtraction(pitchtrackNoteTrainFolderPath,featureVecTrainFolderPath,recordingNamesTrain)
 
-    recordingNames = ['male_02_neg_1', 'male_12_neg_1', 'male_12_pos_1', 'male_13_pos_1', 'male_13_pos_3']
-    # recordingNames = ['male_02_neg_1']
-    for rn in recordingNames:
-        pitchtrack_filename = './pYinOut/laosheng/train/'+rn+'_pitchtrack.txt'
-        monoNoteOut_filename = './pYinOut/laosheng/train/'+rn+'_monoNoteOut.txt'
+    ######### construct target json ###########
 
-        ptSeg.doSegmentationForPyinVamp(pitchtrack_filename, monoNoteOut_filename)
+    fvt1 = fvt.FeatureVecTarget()
+    fvt1.constructJson4DetailFeature(featureVecTrainFolderPath,targetTrainFolderPath,recordingNamesTrain,groundtruthNoteDetailPath)
 
-        # ptSeg.pltNotePitchtrack(saveFig=True, figFolder='../jingjuSegPic/laosheng/train/male_13/pos_3_midinote/')
+    ################ train ####################
+    ttknn1 = ttknn.TrainTestKNN()
+    ttknn1.gatherFeatureTarget(featureVecTrainFolderPath,targetTrainFolderPath,recordingNamesTrain)
+    # ttknn1.featureVec2DPlot([3,7])
+    ttknn1.crossValidation(pitchContourClassificationModelName)
+    '''
 
-    ###################### calculate the polynomial fitting coefs and vibrato frequency ################################
-    #  use pitch track ptseg.pitchtrackByNotes from last step
+    ################################################## predict #########################################################
 
-        featureDict = {}
-        segmentsExport = []
-        smoothBoxPts = []
-        curvefittingDeg = 1
-        jj = 1
-        for ii in range(len(ptSeg.pitchtrackByNotes)):
-            pt = ptSeg.pitchtrackByNotes[ii][0]
-            pt = np.array(pt, dtype=np.float32)
-            x, y = nc1.normalizeNotePt(pt)                  #  normalise x to [0,1], remove y DC
-            sbp = nc1.localMinMax(y)                        #  local minima and extrema of pitch track
-            nc1.diffExtrema(x,y)                            #  the amplitude difference of minima and extrema
-            nc1.segmentPointDetection1(0.20)
+    # segmentation
+    nc2 = nc.noteClass()
+    nc2.noteSegmentationFeatureExtraction(pitchtrackNotePredictFolderPath,
+                                          featureVecPredictFolderPath,recordingNamesPredict,predict=True)
 
-            # # construct the segments frame vector
-            # noteStartFrame = ptSeg.noteStartEndFrame[ii][0]
-            # noteEndFrame = ptSeg.noteStartEndFrame[ii][1]
-            # extremaInd = np.array(nc1.extrema)
-            # segmentsInd = extremaInd[nc1.segments]+noteStartFrame
-            # segmentsInd = np.insert(segmentsInd,0,noteStartFrame)
-            # segmentsInd = np.append(segmentsInd,noteEndFrame)+2     # +2 for sonicVisualizer alignment
-            # for sgi in segmentsInd:
-            #     segmentsExport.append([sgi,random.random()*len(segmentsInd)])
+    # predict
+    ttknn2 = ttknn.TrainTestKNN()
+    ttknn2.predict(pitchContourClassificationModelName,featureVecPredictFolderPath,
+                   targetPredictFolderPath,recordingNamesPredict)
 
-            #  nc1.segmentPointDetection2()  # segmentation point
-            nc1.segmentRefinement(pt)                                               # do the refined segmentation
-            #print nc1.refinedNotePts
+    ########################################### representation #########################################################
 
-            for rpt in nc1.refinedNotePts:
-                print jj
+    for rm in recordingNamesPredict:
+        targetFilename = targetPredictFolderPath+rm+'.json'
+        refinedSegmentFeaturesFilename = pitchtrackNotePredictFolderPath+rm+'_refinedSegmentFeatures.json'
+        # representationFilename = pitchtrackNotePredictFolderPath+rm+'_representation.txt'
+        representationFilename = pitchtrackNotePredictFolderPath+rm+'_representation.json'
+        figureFilename = pitchtrackNotePredictFolderPath+rm+'_reprensentationContourFigure.png'
+        pitchtrackFilename = pitchtrackNotePredictFolderPath+rm+'_pitchtrack.txt'
 
-                xRpt, yRpt = nc1.normalizeNotePt(rpt)                               #  normalise x to [0,1], remove y DC
-                nc1.localMinMax(yRpt,sbp)                                           #  local minima and extrema of pitch track
-                                                                                    #  use the same smooth pts as before
-                # p = nc1.pitchContourFit(xRpt, yRpt, curvefittingDeg)              #  curve fitting
-                # rsquare = nc1.polyfitRsquare(xRpt, yRpt, p)                        #  polynomial fitting coefs
-
-                p, rsquare = nc1.pitchContourLMBySM(xRpt,yRpt)                      #  1 degree curve fitting statsmodels
-                vibFreq = nc1.vibFreq(rpt, curvefittingDeg)                         #  vibrato frequence
-
-                # featureVec = np.append(p,[rsquare,vibFreq])
-                featureVec = np.append([],[rsquare])  #  test different feature vector
-                featureDict[jj] = featureVec.tolist()
-
-                #  this plot step is slow, if we only want the features, we can comment this line
-                nc1.pltRefinedNotePtFc(xRpt, yRpt, p, rsquare, vibFreq, saveFig=True,
-                                        figFolder='../jingjuSegPic/laosheng/train/'+rn+'_curvefit_refined/', figNumber = jj)
-                jj += 1
-
-        featureFilename = './pYinOut/laosheng/train/featureVec/'+rn+'.json'
-        with open(featureFilename, 'w') as outfile:
-            json.dump(featureDict, outfile)
-
-        # with open('./pYinOut/laosheng/train/segment_'+rn+'.txt', "w") as outfile:
-        #     for se in segmentsExport:
-        #         outfile.write(str(int(se[0]))+'\t'+str(se[1])+'\n')
-
-    ########################################## feature vectors classify ################################################
-
-    recordingNames = ['male_02_neg_1', 'male_12_neg_1', 'male_12_pos_1', 'male_13_pos_1', 'male_13_pos_3']
-    prependPathClassified = '/Users/gong/Documents/pycharmProjects/jingjuSegPic/laosheng/train/classified'
-
-    nc1 = nc.noteClass()
-    allNoteClasses = list(nc1.basicNoteClasses.keys()) + nc1.unClassifiedNoteClasses
-
-    for rn in recordingNames:
-        featureFilename = './pYinOut/laosheng/train/featureVec/'+rn+'.json'
-        targetFilename = './pYinOut/laosheng/train/target/'+rn+'.json'
-        with open(featureFilename) as data_file:
-            featureDict = json.load(data_file)
-
-        targetDict = {}
-        for ii in range(1, len(featureDict)+1):
-            for noteClass in allNoteClasses:
-                noteClassRecordingFoldername = os.path.join(prependPathClassified, noteClass, rn+'midinote')
-                if os.path.isdir(noteClassRecordingFoldername):
-                    onlypngs = [ f for f in os.listdir(noteClassRecordingFoldername) if f.endswith('.png') ]
-                    for png in onlypngs:
-                        pngNum = os.path.splitext(png)[0]
-                        if str(ii) == pngNum:
-                            if noteClass in nc1.basicNoteClasses:
-                                #  targetDict[ii] = nc1.basicNoteClasses[noteClass]  #  detail classes
-                                targetDict[ii] = 0  # 5 basic classes
-                            else:
-                                #  targetDict[ii] = 5  #  detail classes
-                                targetDict[ii] = 1  # non classified classes
-
-        with open(targetFilename, 'w') as outfile:
-            json.dump(targetDict, outfile)
-
-
-
-    ################################################## train test ######################################################
-
-    recordingNames = ['male_02_neg_1', 'male_12_neg_1', 'male_12_pos_1', 'male_13_pos_1', 'male_13_pos_3']
-    prependPathClassified = '/Users/gong/Documents/pycharmProjects/jingjuSegPic/laosheng/train/classified'
-    #  classes = [0,1,2,3,4,5]  #  detail classes
-    classes = [0,1]  #  basic and non classified classes
-
-    # collect the feature and target from individual file to one file
-    featureDictAll = {}
-    targetDictAll = {}
-    for rn in recordingNames:
-        featureFilename = './pYinOut/laosheng/train/featureVec/'+rn+'.json'
-        targetFilename = './pYinOut/laosheng/train/target/'+rn+'.json'
-
-        with open(featureFilename) as data_file:
-            featureDict = json.load(data_file)
-        with open(targetFilename) as data_file:
-            targetDict = json.load(data_file)
-
-        featureKeyList = list(featureDict.keys())
-        targetKeyList = list(targetDict.keys())
-
-        for jj in targetKeyList:
-            featureDictAll[rn+'_'+jj] = featureDict[jj]
-            targetDictAll[rn+'_'+jj] = targetDict[jj]
-
-    shuffledKeys = list(targetDictAll.keys())  #  get the keys which are the recording identifiers
-    random.shuffle(shuffledKeys)  #  shuffle the keys
-
-    # partition
-    step = len(shuffledKeys)/5
-
-    knn = neighbors.KNeighborsClassifier(n_neighbors=5)
-
-    misclassifiedRateVec = []
-
-    for ii in range(5):
-        if ii == 0:
-            testKeys = shuffledKeys[ii:step]
-        if ii == 4:
-            testKeys = shuffledKeys[ii*step:]
-        else:
-            testKeys = shuffledKeys[ii*step:(ii+1)*step]
-
-        trainKeys = shuffledKeys[:]
-        for key2rm in testKeys:
-            if key2rm in trainKeys:
-                trainKeys.remove(key2rm)
-
-        trainFeatureVec = []
-        testFeatureVec =[]
-        trainTargetVec =[]
-        testTargetVec = []
-
-        for trk in trainKeys:
-            trainFeatureVec.append(featureDictAll[trk])
-            trainTargetVec.append(targetDictAll[trk])
-        for tek in testKeys:
-            testFeatureVec.append(featureDictAll[tek])
-            testTargetVec.append(targetDictAll[tek])
-
-        # train and test
-        knn.fit(trainFeatureVec, trainTargetVec)
-        testPredictVec = knn.predict(testFeatureVec)
-
-        # result is a vector which non zero elements are misclassfied
-        result = np.array(testTargetVec) - np.array(testPredictVec)
-
-        # result dictionary contains misclassied key:[target class, classified class]
-        resultDict = {}
-        for rs in range(len(result)):
-            if result[rs]:
-                resultDict[testKeys[rs]] = [testTargetVec[rs],testPredictVec[rs]]
-
-        # statistics or misclassfied
-        resultStatDict = {}
-        for tg in classes:
-            classesCopy = classes[:]
-            classesCopy.remove(tg)
-            for cl in classesCopy:
-                mcc = str(tg)+str(cl)  #  misclassified combination
-                resultStatDict[mcc] = 0
-                for rd in resultDict.values():
-                    if rd == [tg, cl]:
-                        resultStatDict[mcc] += 1
-
-        for rsd in resultStatDict.keys():
-            resultStatDict[rsd] /= float(len(resultDict))
-        #  print resultStatDict
-
-        #  sort this dictionary by value
-        sortedDict = sorted(resultStatDict.items(), key=operator.itemgetter(1), reverse=True)
-        # print sortedDict
-
-        misclassified1to0 = 0
-        for jj in resultDict.values():
-            if jj[0] == 1 and jj[1] == 0:
-                misclassified1to0 += 1
-
-        #  misclassifiedRate = len(np.nonzero(result)[0])/float(len(result))
-        misclassifiedRate = misclassified1to0/float(len(np.nonzero(result)[0]))
-        misclassifiedRateVec.append(misclassifiedRate)
-        print misclassifiedRate
-        #  print resultStatDict
-
-    print 'mean misclassified rate: '+ str(np.mean(misclassifiedRateVec))
+        rsm1 = rsm.RefinedSegmentsManipulation()
+        rsm1.process(refinedSegmentFeaturesFilename,targetFilename,representationFilename,figureFilename)
 
     '''
     ################################################## copy code #######################################################
