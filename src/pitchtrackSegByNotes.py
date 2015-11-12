@@ -20,6 +20,7 @@ class pitchtrackSegByNotes(object):
 
     def reset(self):
         self.noteStartEndFrame = []
+        self.coarseSegmentationStartEndFrame = []
         self.pitchtrackByNotes = []
 
     def noteEndFrameHelper(self, notePitchtrack, startDur):
@@ -113,6 +114,12 @@ class pitchtrackSegByNotes(object):
 
         return noteStartingTime, noteDurTime
 
+    def readCoarseSegmentation(self, coarseSegmentation_filename):
+
+        coarseSeg = np.loadtxt(coarseSegmentation_filename,usecols=[0])
+
+        return coarseSeg
+
     def doSegmentationForPyinVamp(self, pitchtrack_filename, monoNoteOut_filename):
 
         # doSegmentationFunction for pYin vamp plugin exported
@@ -147,6 +154,36 @@ class pitchtrackSegByNotes(object):
             noteEndingFrame = int(noteEndingTime[ii]*(44100/256))
             self.noteStartEndFrame.append([noteStartingFrame,noteEndingFrame])
             self.pitchtrackByNotes.append([notePitchtrack.tolist(), startDur])
+
+        return
+
+    def coarseSegmentation(self,monoNoteOut_filename, coarseSegmentation_filename):
+        '''
+        :param monoNoteOut_filename:
+        :param coarseSegmentation_filename: segmentation point
+        :return:
+        '''
+
+        noteStartingTime, noteDurTime = self.readPyinMonoNoteOut(monoNoteOut_filename)
+        coarseSegTime = self.readCoarseSegmentation(coarseSegmentation_filename)
+        noteEndingTime = noteStartingTime+noteDurTime
+
+        for ii in range(len(noteStartingTime)):
+            startingTime_old = noteStartingTime[ii]
+            for jj in range(len(coarseSegTime)-1):
+                if coarseSegTime[jj]>startingTime_old and coarseSegTime[jj]<noteEndingTime[ii]:
+
+                    if coarseSegTime[jj+1] < noteEndingTime[ii]:
+
+                        segStartingFrame = int(startingTime_old*(self.fs/self.hopSize))
+                        segEndingFrame = int(coarseSegTime[jj]*(self.fs/self.hopSize))
+                        self.coarseSegmentationStartEndFrame.append([segStartingFrame,segEndingFrame])
+                        startingTime_old = coarseSegTime[jj]
+                    else:
+
+                        segStartingFrame = int(coarseSegTime[jj]*(self.fs/self.hopSize))
+                        segEndingFrame = int(noteEndingTime[ii]*(self.fs/self.hopSize))
+                        self.coarseSegmentationStartEndFrame.append([segStartingFrame,segEndingFrame])
 
         return
 

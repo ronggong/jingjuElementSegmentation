@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import utilFunc as uf
 import statsmodels.api as smapi
+import evaluation as evalu
 import pitchtrackSegByNotes
 from scipy.signal import argrelextrema
 
@@ -563,7 +564,8 @@ class noteClass(object):
 
         return featureVec,extrema
 
-    def noteSegmentationFeatureExtraction(self,pitchtrackNoteFolderPath,featureVecFolderPath,recordingNames,predict=False):
+    def noteSegmentationFeatureExtraction(self,pitchtrackNoteFolderPath,featureVecFolderPath,
+                                          recordingNames,segCoef=0.2,predict=False,evaluation=False):
 
         '''
         This process will do    1) segment pitchtrack into notes which boundaries are given by pYIN
@@ -583,11 +585,19 @@ class noteClass(object):
 
         ptSeg = pitchtrackSegByNotes.pitchtrackSegByNotes()
 
+        if evaluation:
+            evalu1 = evalu.Evaluation()                                                     #  evaluation object
+            COnOffall, COnall, OBOnall, OBOffall,gt,st = 0,0,0,0,0,0
+
         for rn in recordingNames:
             pitchtrack_filename = pitchtrackNoteFolderPath+rn+'_pitchtrack.txt'
             monoNoteOut_filename = pitchtrackNoteFolderPath+rn+'_monoNoteOut.txt'
 
             ptSeg.doSegmentationForPyinVamp(pitchtrack_filename, monoNoteOut_filename)
+
+            if evaluation:
+                coarseSegmentation_filename = pitchtrackNoteFolderPath+rn+'_coarseSeg.txt'
+                ptSeg.coarseSegmentation(monoNoteOut_filename,coarseSegmentation_filename)      #  groundtruth segmentation
 
             # ptSeg.pltNotePitchtrack(saveFig=True, figFolder='../jingjuSegPic/laosheng/train/male_13/pos_3_midinote/')
 
@@ -607,7 +617,7 @@ class noteClass(object):
                 x, y = self.normalizeNotePt(pt)                  #  normalise x to [0,1], remove y DC
                 sbp = self.localMinMax(y)                        #  local minima and extrema of pitch track
                 self.diffExtrema(x,y)                            #  the amplitude difference of minima and extrema
-                self.segmentPointDetection1(0.20)
+                self.segmentPointDetection1(segCoef)                #  do the extrema segmentation here
 
                 if predict:
                     # construct the segments frame vector: frame boundary of segments
@@ -617,14 +627,14 @@ class noteClass(object):
                     extremaInd = np.array(self.extrema)
                     segmentsInd = extremaInd[self.segments]+noteStartFrame
                     segmentsInd = np.insert(segmentsInd,0,noteStartFrame)
-                    segmentsInd = np.append(segmentsInd,noteEndFrame)     # +2 for sonicVisualizer alignment
+                    segmentsInd = np.append(segmentsInd,noteEndFrame)+2                     # +2 for sonicVisualizer alignment
                     # segmentsExport[jjj] = str(segmentsInd)
                     for kk in range(len(segmentsInd)-1):
-                        segmentsExport[jjj] = [segmentsInd[kk],segmentsInd[kk+1]]
+                        segmentsExport[jjj] = [segmentsInd[kk],segmentsInd[kk+1]]           #  segmentation boundary
                         jjj += 1
 
                 #  nc1.segmentPointDetection2()  # segmentation point
-                self.segmentRefinement(pt)                                               # do the refined segmentation
+                self.segmentRefinement(pt)                                                  #  do the refined segmentation
                 #print self.refinedNotePts
 
                 for rpt in self.refinedNotePts:
@@ -641,19 +651,34 @@ class noteClass(object):
                     #                        figNumber = jj)
                     jj += 1
 
+            if evaluation:
+                # evaluate segmentation
+                COnOff, COn, OBOn, OBOff = \
+                    evalu1.coarseEval(ptSeg.coarseSegmentationStartEndFrame,segmentsExport.values())
+                COnOffall += COnOff
+                COnall += COn
+                OBOnall += OBOn
+                OBOffall += OBOff
+                gt += len(ptSeg.coarseSegmentationStartEndFrame)
+                st += len(segmentsExport.values())
+
+            # write feature into json
             featureFilename = featureVecFolderPath+rn+'.json'
             with open(featureFilename, 'w') as outfile:
                 json.dump(featureDict, outfile)
 
             if predict:
-
                 # output segments boundary frames pitch contours
-
                 outJsonDict = {'refinedPitchcontours':refinedPitchcontours,'boundary':segmentsExport,'extremas':extremas}
                 with open('./pYinOut/laosheng/predict/'+rn+'_refinedSegmentFeatures.json', "w") as outfile:
                     json.dump(outJsonDict,outfile)
                     # for se in segmentsExport:
                     #     # outfile.write(str(int(se[0]))+'\t'+str(se[1])+'\n')
                     #     outfile.write(str(se)+'\n')
+
+        if evaluation:
+            # print COnOffall,COnall,OBOnall,OBOffall,gt,st
+            COnOffF,COnF,OBOnRateGT,OBOffRateGT = evalu1.metrics(COnOffall,COnall,OBOnall,OBOffall,gt,st)
+            return COnOffF,COnF,OBOnRateGT,OBOffRateGT
 
 

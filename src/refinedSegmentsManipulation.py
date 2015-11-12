@@ -238,7 +238,7 @@ class RefinedSegmentsManipulation(object):
                     jj += 1
 
     def process(self, refinedSegmentFeaturesName, targetFilename, representationFilename,
-                figureFilename,pitchtrackFilename=None):
+                figureFilename,pitchtrackFilename=None,originalPitchtrackFilename=None):
 
         # load refined segment features and target class
         with open(refinedSegmentFeaturesName) as data_file:
@@ -270,14 +270,15 @@ class RefinedSegmentsManipulation(object):
         #  write the boundary and pitch contours in pitch contour file
         representation = self.pltRepresentation(pitchHz=False,figurePlt=True,
                                                 figureFilename=figureFilename,
-                                                pitchtrackFilename=pitchtrackFilename)
+                                                pitchtrackFilename=originalPitchtrackFilename)
 
         # representation[:,1] = uf.midi2pitch(representation[:,1])
 
         # write the regression pitch track
-        # with open(representationFilename, "w") as outfile:
-        #     for se in representation:
-        #         outfile.write(str(int(se[0]))+'\t'+str(se[1])+'\n')
+        if pitchtrackFilename:
+            with open(pitchtrackFilename, 'w+') as outfile:
+                for se in representation:
+                    outfile.write(str(int(se[0]))+'\t'+str(se[1])+'\n')
 
         outDict = {'Features':self.representationFeaturesDict,'boundary':self.representationBoundariesDict,
                    'target':self.representationTargetDict,'pitchcontours':self.representationSegmentPts}

@@ -83,10 +83,8 @@ if __name__ == "__main__":
 
 
     recordingNamesTrain = ['male_02_neg_1', 'male_12_neg_1', 'male_12_pos_1', 'male_13_pos_1', 'male_13_pos_3']
-    # recordingNamesPredict = ['neg_1','weiguojia']
     recordingNamesPredict = ['weiguojia_section_pro','weiguojia_section_amateur']
-
-    # recordingNames = ['male_02_neg_1', 'male_12_neg_1']
+    #recordingNamesPredict = ['male_02_neg_1', 'male_12_neg_1', 'male_12_pos_1', 'male_13_pos_1', 'male_13_pos_3']       # evaluation
 
     '''
     ############################################## train process #######################################################
@@ -94,7 +92,7 @@ if __name__ == "__main__":
     # If this is ran, we need MANUALLY re-prepare the training groundtruch!!! This will take several days!!!
     ######## segmentation and features ########
     nc1 = nc.noteClass()
-    nc1.noteSegmentationFeatureExtraction(pitchtrackNoteTrainFolderPath,featureVecTrainFolderPath,recordingNamesTrain)
+    nc1.noteSegmentationFeatureExtraction(pitchtrackNoteTrainFolderPath,featureVecTrainFolderPath,recordingNamesTrain,segCoef=0.2)
 
     ######### construct target json ###########
 
@@ -113,12 +111,25 @@ if __name__ == "__main__":
     # segmentation
     nc2 = nc.noteClass()
     nc2.noteSegmentationFeatureExtraction(pitchtrackNotePredictFolderPath,
-                                          featureVecPredictFolderPath,recordingNamesPredict,predict=True)
-
+                                                  featureVecPredictFolderPath,recordingNamesPredict,
+                                                  segCoef=0.3137,predict=True)
     # predict
     ttknn2 = ttknn.TrainTestKNN()
     ttknn2.predict(pitchContourClassificationModelName,featureVecPredictFolderPath,
                    targetPredictFolderPath,recordingNamesPredict)
+
+    '''
+    ################################################ evaluation code ###################################################
+    # uncomment it only when needs evaluation
+    with open('./pYinOut/laosheng/predict/evaluationResult02.txt', "w") as outfile:
+        for sc in np.linspace(0.2,0.5,30):
+            COnOffF,COnF,OBOnRateGT,OBOffRateGT = nc2.noteSegmentationFeatureExtraction(pitchtrackNotePredictFolderPath,
+                                                  featureVecPredictFolderPath,recordingNamesPredict,
+                                                  segCoef=0.3137,predict=True,evaluation=True)
+            outfile.write(str(sc)+'\t'+str([COnOffF,COnF,OBOnRateGT,OBOffRateGT])+'\n')
+    '''
+
+    '''
 
     ########################################### representation #########################################################
 
@@ -128,10 +139,12 @@ if __name__ == "__main__":
         # representationFilename = pitchtrackNotePredictFolderPath+rm+'_representation.txt'
         representationFilename = pitchtrackNotePredictFolderPath+rm+'_representation.json'
         figureFilename = pitchtrackNotePredictFolderPath+rm+'_reprensentationContourFigure.png'
-        pitchtrackFilename = pitchtrackNotePredictFolderPath+rm+'_pitchtrack.txt'
+        pitchtrackFilename = pitchtrackNotePredictFolderPath+rm+'_regression_pitchtrack.txt'
 
         rsm1 = rsm.RefinedSegmentsManipulation()
-        rsm1.process(refinedSegmentFeaturesFilename,targetFilename,representationFilename,figureFilename)
+        rsm1.process(refinedSegmentFeaturesFilename,targetFilename,
+                     representationFilename,figureFilename,pitchtrackFilename)
+'   '''
 
     '''
     ################################################## copy code #######################################################
