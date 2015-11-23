@@ -5,11 +5,14 @@ import copy
 import utilFunc as uf
 import matplotlib.pyplot as plt
 import pitchtrackSegByNotes as ptSeg
+import evaluation as evalu
 
 class RefinedSegmentsManipulation(object):
     def __init__(self):
         self.nc1 = nc.noteClass()
         self.ptSeg1 = ptSeg.pitchtrackSegByNotes()
+        self.evalu1 = evalu.Evaluation()
+        self.evaluationMetrics = []
 
         self.resetRepresentation()
 
@@ -34,7 +37,7 @@ class RefinedSegmentsManipulation(object):
                 ii -= 1
 
 
-    def eliminateOversegmentation(self,slopeTh = 10.0,pitchTh=2.0,boundaryTh=3.0):
+    def eliminateOversegmentation(self,slopeTh = 10.0,pitchTh=2.0,boundaryTh=3.0,flatnoteSlope=20.0):
 
         # abs(the slope of a curve - the slope of its previous curve) < threshold1
 	    # abs(the beginning pitch of a curve - ending pitch of its previous curve) < threshold2
@@ -45,30 +48,31 @@ class RefinedSegmentsManipulation(object):
         while jj > 0:
             secondKey = keys[jj]
             firstKey = keys[jj-1]
-            if self.representationTargetDict[secondKey]==0 and self.representationTargetDict[firstKey]==0:      #  we do this only for linear class
-                slope1 = np.arctan(self.representationFeaturesDict[secondKey][0][0])*180/np.pi
-                slope2 = np.arctan(self.representationFeaturesDict[firstKey][0][0])*180/np.pi
+            #  we do this only for linear class
+            if self.representationTargetDict[secondKey]==0 and self.representationTargetDict[firstKey]==0:
+                slope1 = self.representationFeaturesDict[secondKey][0][0]*self.nc1.samplerate/self.nc1.hopsize
+                slope2 = self.representationFeaturesDict[firstKey][0][0]*self.nc1.samplerate/self.nc1.hopsize
+                slope1 = np.arctan(slope1)*180/np.pi
+                slope2 = np.arctan(slope2)*180/np.pi
                 len1 = len(self.representationSegmentPts[secondKey])*self.nc1.hopsize/self.nc1.samplerate
                 len2 = len(self.representationSegmentPts[firstKey])*self.nc1.hopsize/self.nc1.samplerate
 
                 # this coefs should be ajusted
-                flatnoteSlope = 1.0
                 tooshortNote = 0.05
 
                 if (abs(slope1)>flatnoteSlope and abs(slope2)>flatnoteSlope and slope1*slope2>0) or \
                     (abs(slope1)<flatnoteSlope and abs(slope2)<flatnoteSlope) or \
                     (len1<tooshortNote or len2<tooshortNote):
-                    # if slope1 and slope2 are all not flat notes
-                    # if slope1 and slope2 have the same sign
-
-                    # if slope1 and slope2 are all flat notes
-                    # if seg1 or seg2 too short
+                    # 1) if slope1 and slope2 are all not flat notes, have the same sign
+                    # 2) if slope1 and slope2 are all flat notes
+                    # 3) if seg1 or seg2 too short
 
                     slopeDiff = abs(slope1-slope2)
                     pitchDiff = abs(self.representationSegmentPts[secondKey][0]-self.representationSegmentPts[firstKey][-1])
                     boundaryDiff = self.representationBoundariesDict[secondKey][0]-self.representationBoundariesDict[firstKey][-1]
 
-                    if slopeDiff<slopeTh and pitchDiff<pitchTh and boundaryDiff<boundaryTh:
+                    if (slopeDiff<slopeTh or (abs(slope1)<flatnoteSlope and abs(slope2)<flatnoteSlope))\
+                            and pitchDiff<pitchTh and boundaryDiff<boundaryTh:
                         #  new segment pitch contour
                         previousStartingFrame = self.representationBoundariesDict[firstKey][0]
                         currentStartingFrame = self.representationBoundariesDict[secondKey][0]
@@ -114,7 +118,12 @@ class RefinedSegmentsManipulation(object):
 
         return representation
 
-    def pltRepresentation(self,pitchHz=False,figurePlt=False,figureFilename='test.png',pitchtrackFilename = None):
+    def pltRepresentation(self,pitchHz=False,
+                          figurePlt=False,
+                          figureFilename='test.png',
+                          pitchtrackFilename=None,
+                          refinedSegFilename=None,
+                          evaluation=False):
 
         if figurePlt:
             plt.figure()
@@ -128,13 +137,19 @@ class RefinedSegmentsManipulation(object):
                 plt.plot(frameInd,ptmidi)
 
         representation = []
+        startFrames = []
+        endFrames =[]
         sortedKey = sorted(self.representationTargetDict.keys())
+
         for key in sortedKey:
             leny = len(self.representationSegmentPts[key])
             startFrame = self.representationBoundariesDict[key][0]
             # end frame self.representationBoundariesDict[key][1] is not correct
             endFrame = startFrame + leny
             xboundary = np.linspace(startFrame,endFrame-1,leny)
+
+            startFrames.append(startFrame)
+            endFrames.append(endFrame)
 
             if self.representationTargetDict[key] == 0 or self.representationTargetDict[key] == 1:
                 p = self.representationFeaturesDict[key][0]
@@ -152,9 +167,11 @@ class RefinedSegmentsManipulation(object):
                         plt.plot(xboundary,y,color=color)
 
                         # angle of the curve, only using in condition first degree regression
-                        #angle = np.arctan(self.representationFeaturesDict[key][0][0])*180/np.pi
-                        #plt.annotate('{0:.2f}'.format(angle), xy = (xboundary[0], y[0]),
-                        #    xytext=(xboundary[0]+0.5, y[0]),fontsize=5)
+                        slope = self.representationFeaturesDict[key][0][0]*self.nc1.samplerate/self.nc1.hopsize
+                        slope = np.arctan(slope)*180/np.pi
+
+                        plt.annotate('{0:.2f}'.format(slope), xy = (xboundary[0], y[0]),
+                            xytext=(xboundary[0]+0.5, y[0]),fontsize=5)
 
                         # annotation of boundary
                         #plt.annotate(xboundary[0], xy = (xboundary[0], y[0]),
@@ -174,8 +191,17 @@ class RefinedSegmentsManipulation(object):
         if figurePlt:                                           #  regulate the figure size
             fig = plt.gcf()
             dpi = 180.0
+            print figureFilename, ', plot length: ',len(representation)
             fig.set_size_inches(int(len(representation)*2/dpi),10.5)
             fig.savefig(figureFilename, dpi=dpi)
+
+        if refinedSegFilename and not evaluation:
+            with open(refinedSegFilename, 'w+') as outfile:
+                for ii in range(len(startFrames)):
+                    outfile.write(str(int(startFrames[ii]))+
+                                  '\t'+str(endFrames[ii])+
+                                  '\t'+str(startFrames[ii]*self.nc1.hopsize/float(self.nc1.samplerate))+
+                                  '\t'+str(endFrames[ii]*self.nc1.hopsize/float(self.nc1.samplerate))+'\n')
 
         return representation
 
@@ -192,7 +218,7 @@ class RefinedSegmentsManipulation(object):
                 if firstPass:
                     p,rsquared,yinterp = self.nc1.pitchContourLMBySM(x,y)
                 else:
-                    # second time pass
+                    # second time pass, we use 3 degrees linear regression
                     p = self.nc1.pitchContourFit(x, y, 3)
                     rsquared = self.nc1.polyfitRsquare(x, y, p)
 
@@ -237,8 +263,12 @@ class RefinedSegmentsManipulation(object):
                     self.representationSegmentPts[jj] = yseg
                     jj += 1
 
-    def process(self, refinedSegmentFeaturesName, targetFilename, representationFilename,
-                figureFilename,pitchtrackFilename=None,originalPitchtrackFilename=None):
+    def process(self, refinedSegmentFeaturesName, targetFilename, representationFilename,figureFilename,
+                pitchtrackFilename=None,
+                originalPitchtrackFilename=None,
+                refinedSegGroundtruthFilename=None,
+                evaluation = False,
+                slopeTh=10.0,flatnoteTh=20.0):
 
         # load refined segment features and target class
         with open(refinedSegmentFeaturesName) as data_file:
@@ -250,17 +280,26 @@ class RefinedSegmentsManipulation(object):
         segmentPts = refinedSegmentFeatures['refinedPitchcontours']
         boundaries = refinedSegmentFeatures['boundary']
         extremas = refinedSegmentFeatures['extremas']
+        vibrato = refinedSegmentFeatures['vibrato']
+
+        # vibrato adjust by nadine vibrato detection
+        for k in targetDict.keys():
+            if targetDict[k] == 2:                              #  if it's a vibrato, make it as other
+                targetDict[k] = 1
+            if vibrato[k][0]:
+                targetDict[k] = 2
 
         # representation features for each segment
-
         self.resetRepresentation()
 
         keysInt = [int(i) for i in segmentPts.keys()]
         keys = [str(i) for i in sorted(keysInt)]
 
         self.loopPart(keys,segmentPts,targetDict,boundaries,extremas,True)          #  estimate segment slope
-        self.eliminateOversegmentation()                                            #  elimination
-        self.eliminateOversegmentation()                                            #  second time elimination
+        #  elimination
+        self.eliminateOversegmentation(slopeTh = slopeTh,pitchTh=2.0,boundaryTh=3.0,flatnoteSlope=flatnoteTh)
+        #  second time elimination
+        self.eliminateOversegmentation(slopeTh = slopeTh,pitchTh=2.0,boundaryTh=3.0,flatnoteSlope=flatnoteTh)
 
         #  estimate segment LP coefs 3 degrees
         self.loopPart(sorted(self.representationTargetDict.keys()),self.representationSegmentPts,
@@ -268,9 +307,12 @@ class RefinedSegmentsManipulation(object):
                       [],False)
 
         #  write the boundary and pitch contours in pitch contour file
+        #  save refined segmentation boundary: evaluation = False and refinedSegFilename not None
         representation = self.pltRepresentation(pitchHz=False,figurePlt=True,
                                                 figureFilename=figureFilename,
-                                                pitchtrackFilename=originalPitchtrackFilename)
+                                                pitchtrackFilename=originalPitchtrackFilename,
+                                                refinedSegFilename=refinedSegGroundtruthFilename,
+                                                evaluation = evaluation)
 
         # representation[:,1] = uf.midi2pitch(representation[:,1])
 
@@ -278,7 +320,9 @@ class RefinedSegmentsManipulation(object):
         if pitchtrackFilename:
             with open(pitchtrackFilename, 'w+') as outfile:
                 for se in representation:
-                    outfile.write(str(int(se[0]))+'\t'+str(se[1])+'\n')
+                    outfile.write(str(int(se[0]))+'\t'
+                                +str(se[0]*float(self.nc1.hopsize)/self.nc1.samplerate)+'\t'
+                                +str(se[1])+'\n')
 
         outDict = {'Features':self.representationFeaturesDict,'boundary':self.representationBoundariesDict,
                    'target':self.representationTargetDict,'pitchcontours':self.representationSegmentPts}
@@ -288,3 +332,13 @@ class RefinedSegmentsManipulation(object):
             json.dump(outDict, outfile)
 
         # print self.representationTargetDict
+
+        # evaluation
+        if evaluation and refinedSegGroundtruthFilename:
+            self.ptSeg1.refinedSegmentation(refinedSegGroundtruthFilename)
+            COnOffF,COnF,OBOnRateGT,OBOffRateGT = \
+                self.evalu1.coarseEval(self.ptSeg1.refinedSegmentationStartEndFrame,
+                                       self.representationBoundariesDict.values())
+            self.evaluationMetrics = [COnOffF,COnF,OBOnRateGT,OBOffRateGT,
+                                      len(self.ptSeg1.refinedSegmentationStartEndFrame),
+                                      len(self.representationBoundariesDict.values())]

@@ -21,6 +21,7 @@ class pitchtrackSegByNotes(object):
     def reset(self):
         self.noteStartEndFrame = []
         self.coarseSegmentationStartEndFrame = []
+        self.refinedSegmentationStartEndFrame = []
         self.pitchtrackByNotes = []
 
     def noteEndFrameHelper(self, notePitchtrack, startDur):
@@ -108,11 +109,33 @@ class pitchtrackSegByNotes(object):
         :return: noteStartingTime, noteDurationTime
         '''
 
-        monoNoteOut = np.loadtxt(monoNoteOut_filename)
+        monoNoteOut = np.loadtxt(monoNoteOut_filename,usecols=[0,1,2,3])
         noteStartingTime = monoNoteOut[:,0]
         noteDurTime = monoNoteOut[:,2]
 
         return noteStartingTime, noteDurTime
+
+    def pitch2midiPyinMonoNoteOut(self, monoNoteOut_filename,monoNoteOutMidi_filename):
+
+        '''
+        read note pitch and convert to midi note
+        :param monoNoteOut_filename:
+        :return: noteStartingTime, noteDurationTime
+        '''
+
+        monoNoteOut = np.loadtxt(monoNoteOut_filename,usecols=[0,1,2,3])
+        noteStartingTime = monoNoteOut[:,0]
+        noteDurTime = monoNoteOut[:,2]
+        notePitch = monoNoteOut[:,1]
+        notePitchMidi = pitch2midi(notePitch)
+
+        with open(monoNoteOutMidi_filename, 'w+') as outfile:
+                for ii in range(len(noteStartingTime)):
+                    outfile.write(str(noteStartingTime[ii])+'\t'
+                                +str(notePitchMidi[ii])+'\t'
+                                +str(noteDurTime[ii])+'\n')
+
+        return noteStartingTime, noteDurTime, notePitch, notePitchMidi
 
     def readCoarseSegmentation(self, coarseSegmentation_filename):
 
@@ -129,6 +152,10 @@ class pitchtrackSegByNotes(object):
 
         frameStartingTime, pitchtrack = self.readPyinPitchtrack(pitchtrack_filename)
         noteStartingTime, noteDurTime = self.readPyinMonoNoteOut(monoNoteOut_filename)
+
+        # convert pitch to midi and save pitch track
+        # monoNoteOutMidi_filename = monoNoteOut_filename[:-4]+'_midi.txt'
+        # self.pitch2midiPyinMonoNoteOut(monoNoteOut_filename,monoNoteOutMidi_filename)
 
         self.minMaxPitchtrack(pitchtrack)
 
@@ -150,8 +177,8 @@ class pitchtrackSegByNotes(object):
             notePitchtrack = pitchtrack[noteStartingIndex[ii]:(noteEndingIndex[ii]+1)]
             startDur = [noteStartingIndex[ii],noteEndingIndex[ii]-noteStartingIndex[ii]+1]
 
-            noteStartingFrame = int(noteStartingTime[ii]*(44100/256))
-            noteEndingFrame = int(noteEndingTime[ii]*(44100/256))
+            noteStartingFrame = int(noteStartingTime[ii]*(self.fs/self.hopSize))
+            noteEndingFrame = int(noteEndingTime[ii]*(self.fs/self.hopSize))
             self.noteStartEndFrame.append([noteStartingFrame,noteEndingFrame])
             self.pitchtrackByNotes.append([notePitchtrack.tolist(), startDur])
 
@@ -186,6 +213,20 @@ class pitchtrackSegByNotes(object):
                         self.coarseSegmentationStartEndFrame.append([segStartingFrame,segEndingFrame])
 
         return
+
+    def refinedSegmentation(self,refinedSegmentation_filename):
+        '''
+        :param refinedSegmentation_filename:
+        :return: refined segmentation start end frame
+        '''
+
+        noteStartingTime, noteDurTime = self.readPyinMonoNoteOut(refinedSegmentation_filename)
+        noteEndingTime = noteStartingTime+noteDurTime
+
+        for ii in range(len(noteStartingTime)):
+            noteStartingFrame = int(noteStartingTime[ii]*(self.fs/self.hopSize))
+            noteEndingFrame = int(noteEndingTime[ii]*(self.fs/self.hopSize))
+            self.refinedSegmentationStartEndFrame.append([noteStartingFrame,noteEndingFrame])
 
     def pltNotePitchtrack(self, saveFig = False, figFolder = './'):
 

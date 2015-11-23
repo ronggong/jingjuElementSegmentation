@@ -5,6 +5,7 @@ import utilFunc as uf
 import statsmodels.api as smapi
 import evaluation as evalu
 import pitchtrackSegByNotes
+import vibrato
 from scipy.signal import argrelextrema
 
 
@@ -200,6 +201,35 @@ class noteClass(object):
 
         return ext
 
+    def vibratoCoef(self,rpt,vibB,vibBExt,vibBFreq):
+        '''
+        vibrato coefs by vibrato Nadine
+        :return:
+        '''
+        vibLen = 0
+        vib = False
+        vibMExt = 0
+        vibMFreq = 0
+
+        # vibrato frame length
+        for vb in vibBExt:
+            vibLen += len(vb)
+
+        # if vibrato length is greater than 0.1, it's a vibrato
+        if vibLen>len(rpt)*0.2:
+            vib = True
+            vibExt = []
+            vibFreq = []
+
+            for ii in range(len(vibBExt)):
+                vibExt = vibExt+ vibBExt[ii]
+                vibFreq = vibFreq + vibBFreq[ii]
+            vibMExt = np.mean(vibExt,dtype=np.float)
+            vibMFreq = np.mean(vibFreq,dtype=np.float)
+
+        vibOut = [vib,vibMFreq,vibMExt]
+
+        return vibOut
 
     ######################################## minima and maxima treatment ###############################################
 
@@ -556,13 +586,18 @@ class noteClass(object):
         extAmo = self.extremaAmount()                                        #  extrema amount
         contourLen = len(xRpt)                                              #  contour length
         fcc = self.fittingcurveCrossing(xRpt,yinterp,p)                      #  fitting curve crossing
-        vibFreq,residuals = self.vibFreq(rpt, curvefittingDeg)                         #  vibrato frequence
+        vibFreq,residuals = self.vibFreq(rpt, curvefittingDeg)                #  vibrato frequence
+
+        # vibrato coefs by vibrato Nadine
+        vibB, vibBExt, vibBFreq, vibBFreqMin, vibBFreqMax = vibrato.vibrato(rpt)
+        # print len(rpt), vibB
+        vibOut = self.vibratoCoef(rpt,vibB,vibBExt,vibBFreq)
 
         # featureVec = np.append(p,[rsquare,vibFreq])
         featureVec = np.append(p,[rsquare,polyVar,standardd,extAmo,contourLen,fcc,vibFreq])  #  test different feature vector
         extrema = sorted(self.minimaInd+self.maximaInd)
 
-        return featureVec,extrema
+        return featureVec,extrema,vibOut
 
     def noteSegmentationFeatureExtraction(self,pitchtrackNoteFolderPath,featureVecFolderPath,
                                           recordingNames,segCoef=0.2,predict=False,evaluation=False):
@@ -608,8 +643,10 @@ class noteClass(object):
             segmentsExport = {}                                 # refined segmentation boundaries
             refinedPitchcontours = {}                           # refined pitch contours
             extremas = {}                                       # extremas
+            vibrato = {}
             curvefittingDeg = 1
             jj = 1
+            jjNone = []
             jjj = 1
             for ii in range(len(ptSeg.pitchtrackByNotes)):
                 pt = ptSeg.pitchtrackByNotes[ii][0]
@@ -617,7 +654,29 @@ class noteClass(object):
                 x, y = self.normalizeNotePt(pt)                  #  normalise x to [0,1], remove y DC
                 sbp = self.localMinMax(y)                        #  local minima and extrema of pitch track
                 self.diffExtrema(x,y)                            #  the amplitude difference of minima and extrema
-                self.segmentPointDetection1(segCoef)                #  do the extrema segmentation here
+                self.segmentPointDetection1(segCoef)             #  do the extrema segmentation here
+
+                #  nc1.segmentPointDetection2()  # segmentation point
+                self.segmentRefinement(pt)                       #  do the refined segmentation
+                #print self.refinedNotePts
+
+                for rpt in self.refinedNotePts:
+                    print jj
+
+                    featureVec,extrema,vibOut = self.featureExtractionProcess(rpt,sbp,curvefittingDeg)
+                    if featureVec[0]:
+                        refinedPitchcontours[jj] = rpt.tolist()
+                        featureDict[jj] = featureVec.tolist()
+                        extremas[jj] = extrema
+                        vibrato[jj] = vibOut
+                    else:
+                        jjNone.append(jj)
+
+                    #  this plot step is slow, if we only want the features, we can comment this line
+                    #nc1.pltRefinedNotePtFc(xRpt, yRpt, p, rsquare, polyVar, vibFreq, saveFig=True,
+                    #                        figFolder='../jingjuSegPic/laosheng/train/refinedSegmentCurvefit/'+rn+'_curvefit_refined/',
+                    #                        figNumber = jj)
+                    jj += 1
 
                 if predict:
                     # construct the segments frame vector: frame boundary of segments
@@ -630,26 +689,9 @@ class noteClass(object):
                     segmentsInd = np.append(segmentsInd,noteEndFrame)+2                     # +2 for sonicVisualizer alignment
                     # segmentsExport[jjj] = str(segmentsInd)
                     for kk in range(len(segmentsInd)-1):
-                        segmentsExport[jjj] = [segmentsInd[kk],segmentsInd[kk+1]]           #  segmentation boundary
+                        if jjj not in jjNone:
+                            segmentsExport[jjj] = [segmentsInd[kk],segmentsInd[kk+1]]       #  segmentation boundary
                         jjj += 1
-
-                #  nc1.segmentPointDetection2()  # segmentation point
-                self.segmentRefinement(pt)                                                  #  do the refined segmentation
-                #print self.refinedNotePts
-
-                for rpt in self.refinedNotePts:
-                    print jj
-
-                    refinedPitchcontours[jj] = rpt.tolist()
-                    featureVec,extrema = self.featureExtractionProcess(rpt,sbp,curvefittingDeg)
-                    featureDict[jj] = featureVec.tolist()
-                    extremas[jj] = extrema
-
-                    #  this plot step is slow, if we only want the features, we can comment this line
-                    #nc1.pltRefinedNotePtFc(xRpt, yRpt, p, rsquare, polyVar, vibFreq, saveFig=True,
-                    #                        figFolder='../jingjuSegPic/laosheng/train/refinedSegmentCurvefit/'+rn+'_curvefit_refined/',
-                    #                        figNumber = jj)
-                    jj += 1
 
             if evaluation:
                 # evaluate segmentation
@@ -669,7 +711,8 @@ class noteClass(object):
 
             if predict:
                 # output segments boundary frames pitch contours
-                outJsonDict = {'refinedPitchcontours':refinedPitchcontours,'boundary':segmentsExport,'extremas':extremas}
+                outJsonDict = {'refinedPitchcontours':refinedPitchcontours,'boundary':segmentsExport,
+                               'extremas':extremas,'vibrato':vibrato}
                 with open('./pYinOut/laosheng/predict/'+rn+'_refinedSegmentFeatures.json', "w") as outfile:
                     json.dump(outJsonDict,outfile)
                     # for se in segmentsExport:

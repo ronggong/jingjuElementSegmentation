@@ -24,6 +24,7 @@ import noteClass as nc
 import featureVecTarget as fvt
 import trainTestKNN as ttknn
 import refinedSegmentsManipulation as rsm
+import evaluation as evalu
 from vibrato import vibrato
 
 if __name__ == "__main__":
@@ -84,6 +85,11 @@ if __name__ == "__main__":
 
     recordingNamesTrain = ['male_02_neg_1', 'male_12_neg_1', 'male_12_pos_1', 'male_13_pos_1', 'male_13_pos_3']
     recordingNamesPredict = ['weiguojia_section_pro','weiguojia_section_amateur']
+
+    evaluation = False                      #  parameters grid search
+
+    slopeTh = 60.0                          #  contour combination slope difference threshold
+    flatnoteTh = 80.0                       #  threshold for deciding one note as flat pitch note
     #recordingNamesPredict = ['male_02_neg_1', 'male_12_neg_1', 'male_12_pos_1', 'male_13_pos_1', 'male_13_pos_3']       # evaluation
 
     '''
@@ -111,8 +117,10 @@ if __name__ == "__main__":
     # segmentation
     nc2 = nc.noteClass()
     nc2.noteSegmentationFeatureExtraction(pitchtrackNotePredictFolderPath,
-                                                  featureVecPredictFolderPath,recordingNamesPredict,
-                                                  segCoef=0.3137,predict=True)
+                                          featureVecPredictFolderPath,
+                                          recordingNamesPredict,
+                                          segCoef=0.3137,predict=True)
+
     # predict
     ttknn2 = ttknn.TrainTestKNN()
     ttknn2.predict(pitchContourClassificationModelName,featureVecPredictFolderPath,
@@ -129,22 +137,69 @@ if __name__ == "__main__":
             outfile.write(str(sc)+'\t'+str([COnOffF,COnF,OBOnRateGT,OBOffRateGT])+'\n')
     '''
 
-    '''
-
     ########################################### representation #########################################################
-
     for rm in recordingNamesPredict:
+        #  filename declaration
         targetFilename = targetPredictFolderPath+rm+'.json'
         refinedSegmentFeaturesFilename = pitchtrackNotePredictFolderPath+rm+'_refinedSegmentFeatures.json'
         # representationFilename = pitchtrackNotePredictFolderPath+rm+'_representation.txt'
         representationFilename = pitchtrackNotePredictFolderPath+rm+'_representation.json'
         figureFilename = pitchtrackNotePredictFolderPath+rm+'_reprensentationContourFigure.png'
         pitchtrackFilename = pitchtrackNotePredictFolderPath+rm+'_regression_pitchtrack.txt'
+        refinedSegmentationGroundtruthFilename = pitchtrackNotePredictFolderPath+rm+'_refinedSeg.txt'
 
         rsm1 = rsm.RefinedSegmentsManipulation()
         rsm1.process(refinedSegmentFeaturesFilename,targetFilename,
-                     representationFilename,figureFilename,pitchtrackFilename)
-'   '''
+                     representationFilename,figureFilename,pitchtrackFilename,
+                     refinedSegGroundtruthFilename=refinedSegmentationGroundtruthFilename,
+                     slopeTh=slopeTh, flatnoteTh=flatnoteTh)
+    '''
+    ############################################### evaluation #########################################################
+    evalu1 = evalu.Evaluation()
+    with open('./pYinOut/laosheng/predict/evaluationResultRefined.txt', "w") as outfile:
+        #  grid search
+        for slopeTh in range(0,110,10):
+            for flatnoteTh in range(0,110,10):
+
+                if evaluation:
+                    COnOffall, COnall, OBOnall, OBOffall,gt,st = 0,0,0,0,0,0        # evaluation metrics
+
+                for rm in recordingNamesPredict:
+                    #  filename declaration
+                    targetFilename = targetPredictFolderPath+rm+'.json'
+                    refinedSegmentFeaturesFilename = pitchtrackNotePredictFolderPath+rm+'_refinedSegmentFeatures.json'
+                    # representationFilename = pitchtrackNotePredictFolderPath+rm+'_representation.txt'
+                    representationFilename = pitchtrackNotePredictFolderPath+rm+'_representation.json'
+                    figureFilename = pitchtrackNotePredictFolderPath+rm+'_reprensentationContourFigure.png'
+                    pitchtrackFilename = pitchtrackNotePredictFolderPath+rm+'_regression_pitchtrack.txt'
+
+                    if evaluation:
+                        refinedSegmentationGroundtruthFilename = pitchtrackNotePredictFolderPath+rm+'_refinedSeg.txt'
+                    else:
+                        refinedSegmentationGroundtruthFilename = None
+
+                    rsm1 = rsm.RefinedSegmentsManipulation()
+                    rsm1.process(refinedSegmentFeaturesFilename,targetFilename,
+                                 representationFilename,figureFilename,pitchtrackFilename,
+                                 refinedSegGroundtruthFilename=refinedSegmentationGroundtruthFilename,
+                                 slopeTh=slopeTh, flatnoteTh=flatnoteTh)
+
+                    #  evaluation metrics collection
+                    if evaluation:                                                  #  if refined seg file exist
+                        COnOffall += rsm1.evaluationMetrics[0]
+                        COnall += rsm1.evaluationMetrics[1]
+                        OBOnall += rsm1.evaluationMetrics[2]
+                        OBOffall += rsm1.evaluationMetrics[3]
+                        gt += rsm1.evaluationMetrics[4]
+                        st += rsm1.evaluationMetrics[5]
+
+                if evaluation:
+                    COnOffF,COnF,OBOnRateGT,OBOffRateGT = evalu1.metrics(COnOffall,COnall,OBOnall,OBOffall,gt,st)
+                    outfile.write(str(slopeTh)+'\t'+str(flatnoteTh)+'\t'+
+                                  str(COnOffF)+'\t'+str(COnF)+'\t'+
+                                  str(OBOnRateGT)+'\t'+str(OBOffRateGT)+'\n')
+                    print slopeTh,flatnoteTh,COnOffF,COnF,OBOnRateGT,OBOffRateGT
+    '''
 
     '''
     ################################################## copy code #######################################################

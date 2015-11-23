@@ -161,6 +161,11 @@ class TrainTestKNN(object):
             keys = data.keys()
             values = data.values()
 
+            # for debug
+            # for ii in values:
+            #     print ii
+            #     print type(ii[0]),type(ii[1]),type(ii[2]),type(ii[3]),type(ii[4]),type(ii[5]),type(ii[6]),type(ii[7]),type(ii[8])
+
             # classify dictionary
             classification = knn.predict(values)
             classificationDict = {}

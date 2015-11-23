@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 
 def vibrato(pitch):
     sampleRate = 44100/256
-    frameSize = int(round(0.35*sampleRate))
+    frameSize = int(round(0.5*sampleRate))
+    frameSize = frameSize if len(pitch)>=frameSize else len(pitch)      #  dynamic frameSize
     fftSize = 4*frameSize
     dBLobe = 15
     dBSecondLobe = 20
@@ -58,7 +59,7 @@ def vibrato(pitch):
     for ii in range (len(startC)):
         # get segment in cents
         contour = f0[startC[ii]:endC[ii]]
-        contour = 1200*np.log2(np.array(contour)/fRef)
+        # contour = 1200*np.log2(np.array(contour)/fRef)            #  it's already in midi
         # frame-wise FFT
         for jj in range(0,len(contour)-frameSize,int(round(frameSize/2))):
             frame = contour[jj:jj+frameSize]
@@ -69,8 +70,9 @@ def vibrato(pitch):
             frame = ess.MovingAverage(size=5)(frame)
             frame = WINDOW(frame)
 
-            if extend<minExt or extend>maxExt:
-                continue
+            # extent constraint
+            #if extend<minExt or extend>maxExt:
+            #    continue
 
             S = ess.Spectrum(size = fftSize)(frame)
 
