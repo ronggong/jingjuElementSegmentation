@@ -16,7 +16,6 @@ dir = os.path.dirname(os.path.realpath(__file__))
 srcpath = dir+'/src'
 sys.path.append(srcpath)
 
-import pYINmain
 import pitchtrackSegByNotes
 import essentia.standard as ess
 import numpy as np
@@ -26,58 +25,35 @@ import trainTestKNN as ttknn
 import refinedSegmentsManipulation as rsm
 import evaluation as evalu
 from vibrato import vibrato
+from pYINPtNote import pYINPtNote
 
 if __name__ == "__main__":
 
     start_time = time.time()  # starting time
 
     '''
-    # initialise
-    filename1 = '/home/rgong/Music/bestQuality/dan/1-08 伴奏：玉堂春跪在督察院.wav'
+    ######################################### pYIN pitchtrack and notes ################################################
+    filename_amateur = '/Users/gong/Documents/MTG document/Jingju arias/jingjuElementMaterials/laosheng/test/weiguojia_section_amateur.wav'
+    filename_pro = '/Users/gong/Documents/MTG document/Jingju arias/jingjuElementMaterials/laosheng/test/weiguojia_section_pro.wav'
+    pYINPtNote(filename_amateur)
     #filename1 = pYinPath + '/testAudioLong.wav'
-    samplingFreq = 44100
-    frameSize = 2048
-    hopSize = 256
-
-    # pYin
-    pYinInst = pYINmain.PyinMain()
-    pYinInst.initialise(channels = 1, inputSampleRate = samplingFreq, stepSize = hopSize, blockSize = frameSize,
-                   lowAmp = 0.80, onsetSensitivity = 0.7, pruneThresh = 0.1)
-
-    # frame-wise calculation
-    audio = ess.MonoLoader(filename = filename1, sampleRate = samplingFreq)()
-    for frame in ess.FrameGenerator(audio, frameSize=frameSize, hopSize=hopSize):
-        fs = pYinInst.process(frame)
-
-    # calculate smoothed pitch and mono note
-    fs = pYinInst.getRemainingFeatures()
-
-    # output and concatenate smoothed pitch track
-    pitchtrack = []
-    print 'pitch track'
-    for ii in fs.m_oSmoothedPitchTrack:
-        pitchtrack.append(ii.values)
-        print ii.values
-    print '\n'
-
-    # output of mono notes,
-    # column 0: frame number,
-    # column 1: pitch in midi numuber, this is the decoded pitch
-    # column 2: attack 1, stable 2, silence 3
-    print 'mono note decoded pitch'
-    for ii in fs.m_oMonoNoteOut:
-        print ii.frameNumber, ii.pitch, ii.noteState
-    print '\n'
-
     '''
 
+    ############################################## initialsation #######################################################
     pitchtrackNoteTrainFolderPath = './pYinOut/laosheng/train/'
-    pitchContourClassificationModelName = './pYinOut/laosheng/train/model/pitchContourClassificationModel.pkl'
+
+    # classification training ground truth
     groundtruthNoteLevelPath = '/Users/gong/Documents/pycharmProjects/jingjuSegPic/laosheng/train/pyinNoteCurvefit/classified'
     groundtruthNoteDetailPath = '/Users/gong/Documents/pycharmProjects/jingjuSegPic/laosheng/train/refinedSegmentCurvefit/classified'
+
+    # classification model path
+    pitchContourClassificationModelName = './pYinOut/laosheng/train/model/pitchContourClassificationModel.pkl'
+
+    # feature, target folders
     featureVecTrainFolderPath = './pYinOut/laosheng/train/featureVec/'
     targetTrainFolderPath = './pYinOut/laosheng/train/target/'
 
+    # predict folders
     pitchtrackNotePredictFolderPath = './pYinOut/laosheng/predict/'
     featureVecPredictFolderPath = './pYinOut/laosheng/predict/featureVec/'
     targetPredictFolderPath = './pYinOut/laosheng/predict/target/'
@@ -113,7 +89,6 @@ if __name__ == "__main__":
     '''
 
     ################################################## predict #########################################################
-
     # segmentation
     nc2 = nc.noteClass()
     nc2.noteSegmentationFeatureExtraction(pitchtrackNotePredictFolderPath,
@@ -140,19 +115,23 @@ if __name__ == "__main__":
     ########################################### representation #########################################################
     for rm in recordingNamesPredict:
         #  filename declaration
+        originalPitchtrackFilename = pitchtrackNotePredictFolderPath+rm+'_pitchtrack.csv'
         targetFilename = targetPredictFolderPath+rm+'.json'
         refinedSegmentFeaturesFilename = pitchtrackNotePredictFolderPath+rm+'_refinedSegmentFeatures.json'
-        # representationFilename = pitchtrackNotePredictFolderPath+rm+'_representation.txt'
         representationFilename = pitchtrackNotePredictFolderPath+rm+'_representation.json'
         figureFilename = pitchtrackNotePredictFolderPath+rm+'_reprensentationContourFigure.png'
-        pitchtrackFilename = pitchtrackNotePredictFolderPath+rm+'_regression_pitchtrack.txt'
-        refinedSegmentationGroundtruthFilename = pitchtrackNotePredictFolderPath+rm+'_refinedSeg.txt'
+
+        # important csv files!!
+        regressionPitchtrackFilename = pitchtrackNotePredictFolderPath+rm+'_regression_pitchtrack.csv'
+        refinedSegmentationGroundtruthFilename = pitchtrackNotePredictFolderPath+rm+'_refinedSeg.csv'
 
         rsm1 = rsm.RefinedSegmentsManipulation()
         rsm1.process(refinedSegmentFeaturesFilename,targetFilename,
-                     representationFilename,figureFilename,pitchtrackFilename,
+                     representationFilename,figureFilename,regressionPitchtrackFilename,
+                     originalPitchtrackFilename=originalPitchtrackFilename,
                      refinedSegGroundtruthFilename=refinedSegmentationGroundtruthFilename,
                      slopeTh=slopeTh, flatnoteTh=flatnoteTh)
+
     '''
     ############################################### evaluation #########################################################
     evalu1 = evalu.Evaluation()

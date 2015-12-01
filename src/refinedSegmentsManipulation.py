@@ -130,11 +130,11 @@ class RefinedSegmentsManipulation(object):
             ii = 0                                              #  a counter for interleave plot the pitch contours
 
             # plot original pitch track for comparison
-            if pitchtrackFilename:
-                frameStartingTime, pt = self.ptSeg1.readPyinPitchtrack(pitchtrackFilename)
-                frameInd = frameStartingTime*self.nc1.samplerate/self.nc1.hopsize
-                ptmidi = uf.pitch2midi(pt)
-                plt.plot(frameInd,ptmidi)
+            # if pitchtrackFilename:
+            #     frameStartingTime, pt = self.ptSeg1.readPyinPitchtrack(pitchtrackFilename)
+            #     frameInd = frameStartingTime*self.nc1.samplerate/self.nc1.hopsize
+            #     ptmidi = uf.pitch2midi(pt)
+            #     plt.plot(frameInd,ptmidi)
 
         representation = []
         startFrames = []
@@ -197,11 +197,12 @@ class RefinedSegmentsManipulation(object):
 
         if refinedSegFilename and not evaluation:
             with open(refinedSegFilename, 'w+') as outfile:
+                outfile.write('startFrame'+','+'endFrame'+','+'startTime'+','+'endTime'+'\n')
                 for ii in range(len(startFrames)):
-                    outfile.write(str(int(startFrames[ii]))+
-                                  '\t'+str(endFrames[ii])+
-                                  '\t'+str(startFrames[ii]*self.nc1.hopsize/float(self.nc1.samplerate))+
-                                  '\t'+str(endFrames[ii]*self.nc1.hopsize/float(self.nc1.samplerate))+'\n')
+                    outfile.write(str(int(startFrames[ii]))+','
+                                  +str(int(endFrames[ii]))+','
+                                  +str(startFrames[ii]*self.nc1.hopsize/float(self.nc1.samplerate))+','
+                                  +str(endFrames[ii]*self.nc1.hopsize/float(self.nc1.samplerate))+'\n')
 
         return representation
 
@@ -263,8 +264,36 @@ class RefinedSegmentsManipulation(object):
                     self.representationSegmentPts[jj] = yseg
                     jj += 1
 
-    def process(self, refinedSegmentFeaturesName, targetFilename, representationFilename,figureFilename,
-                pitchtrackFilename=None,
+    def writeRegressionPitchtrack(self,originalPitchtrackFilename,regressionPitchtrackFilename,representation):
+        '''
+        write regression pitch track
+        :param originalPitchtrackFilename:
+        :param regressionPitchtrackFilename:
+        :param representation:
+        :return:
+        '''
+        if regressionPitchtrackFilename:
+            with open(regressionPitchtrackFilename, 'w+') as outfile:
+                #  non-voice insertion
+                representationNpArray = np.array(representation)
+                # maxIndexRepresentation = max(representationNpArray[:,0])
+                frameStartingTime, originalPitchtrack = self.ptSeg1.readPyinPitchtrack(originalPitchtrackFilename)
+                lenFrame = len(frameStartingTime)
+                wholeIndex = range(2,int(lenFrame)+1)                               #  sonicVisualizer Index start from 2
+                outfile.write('frame'+','+'time'+','+'pitch'+'\n')
+                for wi in wholeIndex:
+                    if wi in representationNpArray[:,0]:
+                        wiIndex = np.where(representationNpArray[:,0]==wi)[0][0]
+                        value = representationNpArray[wiIndex,1]                    #  if value is in regression pitchtrack
+                    else:
+                        value = -100.0                                              #  if value is NOT in regression pitchtrack
+                    outfile.write(str(wi)+','
+                                +str(wi*float(self.nc1.hopsize)/self.nc1.samplerate)+','
+                                +str(value)+'\n')
+
+    def process(self, refinedSegmentFeaturesName,
+                targetFilename, representationFilename,figureFilename,
+                regressionPitchtrackFilename=None,
                 originalPitchtrackFilename=None,
                 refinedSegGroundtruthFilename=None,
                 evaluation = False,
@@ -317,12 +346,9 @@ class RefinedSegmentsManipulation(object):
         # representation[:,1] = uf.midi2pitch(representation[:,1])
 
         # write the regression pitch track
-        if pitchtrackFilename:
-            with open(pitchtrackFilename, 'w+') as outfile:
-                for se in representation:
-                    outfile.write(str(int(se[0]))+'\t'
-                                +str(se[0]*float(self.nc1.hopsize)/self.nc1.samplerate)+'\t'
-                                +str(se[1])+'\n')
+        self.writeRegressionPitchtrack(originalPitchtrackFilename,regressionPitchtrackFilename,representation)
+
+        #print self.representationBoundariesDict
 
         outDict = {'Features':self.representationFeaturesDict,'boundary':self.representationBoundariesDict,
                    'target':self.representationTargetDict,'pitchcontours':self.representationSegmentPts}

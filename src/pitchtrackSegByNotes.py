@@ -4,7 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from utilFunc import pitch2midi
-
+from utilFunc import cents2pitch
+from utilFunc import hz2cents
 
 class pitchtrackSegByNotes(object):
 
@@ -96,7 +97,7 @@ class pitchtrackSegByNotes(object):
         :return: frameStartingTime, pitchtrack
         '''
 
-        pitchtrack = np.loadtxt(pitchtrack_filename)
+        pitchtrack = np.loadtxt(pitchtrack_filename,delimiter=',')
         frameStartingTime = pitchtrack[:,0]
         pitchtrack = pitchtrack[:,1]
 
@@ -109,7 +110,7 @@ class pitchtrackSegByNotes(object):
         :return: noteStartingTime, noteDurationTime
         '''
 
-        monoNoteOut = np.loadtxt(monoNoteOut_filename,usecols=[0,1,2,3])
+        monoNoteOut = np.loadtxt(monoNoteOut_filename,delimiter=',',usecols=[0,1,2,3])
         noteStartingTime = monoNoteOut[:,0]
         noteDurTime = monoNoteOut[:,2]
 
@@ -123,17 +124,26 @@ class pitchtrackSegByNotes(object):
         :return: noteStartingTime, noteDurationTime
         '''
 
-        monoNoteOut = np.loadtxt(monoNoteOut_filename,usecols=[0,1,2,3])
+        monoNoteOut = np.loadtxt(monoNoteOut_filename,delimiter=',',usecols=[0,1,2,3])
         noteStartingTime = monoNoteOut[:,0]
         noteDurTime = monoNoteOut[:,2]
         notePitch = monoNoteOut[:,1]
         notePitchMidi = pitch2midi(notePitch)
 
         with open(monoNoteOutMidi_filename, 'w+') as outfile:
-                for ii in range(len(noteStartingTime)):
-                    outfile.write(str(noteStartingTime[ii])+'\t'
-                                +str(notePitchMidi[ii])+'\t'
-                                +str(noteDurTime[ii])+'\n')
+            outfile.write('startTime'+','
+                            +'pitch'+','
+                            +'freq'+','
+                            +'duration'+','
+                            +'noteStr'+'\n')
+            for ii in range(len(noteStartingTime)):
+                noteCents = hz2cents(float(notePitch[ii]))
+                noteStr = cents2pitch(noteCents)
+                outfile.write(str(noteStartingTime[ii])+','
+                            +str(notePitchMidi[ii])+','
+                            +str(notePitch[ii])+','
+                            +str(noteDurTime[ii])+','
+                            +noteStr+'\n')
 
         return noteStartingTime, noteDurTime, notePitch, notePitchMidi
 
@@ -154,8 +164,8 @@ class pitchtrackSegByNotes(object):
         noteStartingTime, noteDurTime = self.readPyinMonoNoteOut(monoNoteOut_filename)
 
         # convert pitch to midi and save pitch track
-        # monoNoteOutMidi_filename = monoNoteOut_filename[:-4]+'_midi.txt'
-        # self.pitch2midiPyinMonoNoteOut(monoNoteOut_filename,monoNoteOutMidi_filename)
+        monoNoteOutMidi_filename = monoNoteOut_filename[:-4]+'_midi.csv'
+        self.pitch2midiPyinMonoNoteOut(monoNoteOut_filename,monoNoteOutMidi_filename)
 
         self.minMaxPitchtrack(pitchtrack)
 

@@ -625,8 +625,8 @@ class noteClass(object):
             COnOffall, COnall, OBOnall, OBOffall,gt,st = 0,0,0,0,0,0
 
         for rn in recordingNames:
-            pitchtrack_filename = pitchtrackNoteFolderPath+rn+'_pitchtrack.txt'
-            monoNoteOut_filename = pitchtrackNoteFolderPath+rn+'_monoNoteOut.txt'
+            pitchtrack_filename = pitchtrackNoteFolderPath+rn+'_pitchtrack.csv'
+            monoNoteOut_filename = pitchtrackNoteFolderPath+rn+'_monoNoteOut.csv'
 
             ptSeg.doSegmentationForPyinVamp(pitchtrack_filename, monoNoteOut_filename)
 
