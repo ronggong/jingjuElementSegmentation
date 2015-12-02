@@ -115,8 +115,8 @@ def cents2pitch(cents, regDefault = 4):
     reg = regDefault + regAug
 
     if remPart >= 0:
-        returnStr = pitchLetter + str(reg) + ' + ' + str(round(remPart,2)) + ' cents'
+        returnStr = pitchLetter + str(reg) + '+' + str(round(remPart,1)) + 'c'
     else:
-        returnStr = pitchLetter + str(reg) + ' - ' + str(round(abs(remPart),2)) + ' cents'
+        returnStr = pitchLetter + str(reg) + '-' + str(round(abs(remPart),1)) + 'c'
 
     return returnStr

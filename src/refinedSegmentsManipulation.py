@@ -280,16 +280,22 @@ class RefinedSegmentsManipulation(object):
                 frameStartingTime, originalPitchtrack = self.ptSeg1.readPyinPitchtrack(originalPitchtrackFilename)
                 lenFrame = len(frameStartingTime)
                 wholeIndex = range(2,int(lenFrame)+1)                               #  sonicVisualizer Index start from 2
-                outfile.write('frame'+','+'time'+','+'pitch'+'\n')
+                outfile.write('frame'+','+'time'+','+'pitch'+'freq'+'noteStr'+'\n')
                 for wi in wholeIndex:
                     if wi in representationNpArray[:,0]:
                         wiIndex = np.where(representationNpArray[:,0]==wi)[0][0]
                         value = representationNpArray[wiIndex,1]                    #  if value is in regression pitchtrack
+                        freq = uf.midi2pitch(value)
+                        noteStr = uf.cents2pitch(uf.hz2cents(float(freq)))
                     else:
                         value = -100.0                                              #  if value is NOT in regression pitchtrack
+                        freq = -100.0
+                        noteStr = 'null'
                     outfile.write(str(wi)+','
                                 +str(wi*float(self.nc1.hopsize)/self.nc1.samplerate)+','
-                                +str(value)+'\n')
+                                +str(value)+','
+                                +str(freq)+','
+                                +noteStr+'\n')
 
     def process(self, refinedSegmentFeaturesName,
                 targetFilename, representationFilename,figureFilename,
