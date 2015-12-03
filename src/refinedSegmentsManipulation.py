@@ -280,7 +280,7 @@ class RefinedSegmentsManipulation(object):
                 frameStartingTime, originalPitchtrack = self.ptSeg1.readPyinPitchtrack(originalPitchtrackFilename)
                 lenFrame = len(frameStartingTime)
                 wholeIndex = range(2,int(lenFrame)+1)                               #  sonicVisualizer Index start from 2
-                outfile.write('frame'+','+'time'+','+'pitch'+'freq'+'noteStr'+'\n')
+                outfile.write('frame'+','+'time'+','+'pitch'+','+'freq'+','+'noteStr'+'\n')
                 for wi in wholeIndex:
                     if wi in representationNpArray[:,0]:
                         wiIndex = np.where(representationNpArray[:,0]==wi)[0][0]
@@ -343,7 +343,7 @@ class RefinedSegmentsManipulation(object):
 
         #  write the boundary and pitch contours in pitch contour file
         #  save refined segmentation boundary: evaluation = False and refinedSegFilename not None
-        representation = self.pltRepresentation(pitchHz=False,figurePlt=True,
+        representation = self.pltRepresentation(pitchHz=False,figurePlt=False,
                                                 figureFilename=figureFilename,
                                                 pitchtrackFilename=originalPitchtrackFilename,
                                                 refinedSegFilename=refinedSegGroundtruthFilename,

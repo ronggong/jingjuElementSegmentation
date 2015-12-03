@@ -3,6 +3,7 @@
 import sys, os
 import matplotlib.pyplot as plt
 import time
+import subprocess
 import json
 import shutil
 import random
@@ -27,40 +28,56 @@ import evaluation as evalu
 from vibrato import vibrato
 from pYINPtNote import pYINPtNote
 
+def getPtNotes(mp3Folder, recordingName):
+
+    mp3Name = mp3Folder+recordingName+'.mp3'
+    ptCsvName = mp3Folder+recordingName+'_pitchtrack.csv'
+    ntCsvName = mp3Folder+recordingName+'_monoNoteOut.csv'
+
+    if os.path.isfile(ptCsvName):
+        subprocess.call(["rm",ptCsvName])
+    if os.path.isfile(ntCsvName):
+        subprocess.call(["rm",ntCsvName])
+
+    # run bash code for getting pitch track and notes
+    subprocess.call(["./sonicAnnotator/sonic-annotator", "-t", "./sonicAnnotator/pitchtrack.n3",
+                     mp3Name, "-w", "csv", "--csv-one-file", ptCsvName])
+    subprocess.call(["./sonicAnnotator/sonic-annotator", "-t", "./sonicAnnotator/monoNoteOut.n3",
+                     mp3Name, "-w", "csv", "--csv-one-file", ntCsvName])
+
 if __name__ == "__main__":
 
     start_time = time.time()  # starting time
 
-    '''
     ######################################### pYIN pitchtrack and notes ################################################
-    filename_amateur = '/Users/gong/Documents/MTG document/Jingju arias/jingjuElementMaterials/laosheng/test/weiguojia_section_amateur.wav'
-    filename_pro = '/Users/gong/Documents/MTG document/Jingju arias/jingjuElementMaterials/laosheng/test/weiguojia_section_pro.wav'
-    pYINPtNote(filename_amateur)
-    #filename1 = pYinPath + '/testAudioLong.wav'
-    '''
+    mp3Folder = '/Users/gong/Documents/github/MTG/ICASSP2016/exampleAudios/07/' # to be change
+    recordingNamesPredict = ['teacher','student']
+
+    for name in recordingNamesPredict:
+        getPtNotes(mp3Folder,name)
 
     ############################################## initialsation #######################################################
-    pitchtrackNoteTrainFolderPath = './pYinOut/laosheng/train/'
+    #pitchtrackNoteTrainFolderPath = './pYinOut/laosheng/train/'
 
     # classification training ground truth
-    groundtruthNoteLevelPath = '/Users/gong/Documents/pycharmProjects/jingjuSegPic/laosheng/train/pyinNoteCurvefit/classified'
-    groundtruthNoteDetailPath = '/Users/gong/Documents/pycharmProjects/jingjuSegPic/laosheng/train/refinedSegmentCurvefit/classified'
+    #groundtruthNoteLevelPath = '/Users/gong/Documents/pycharmProjects/jingjuSegPic/laosheng/train/pyinNoteCurvefit/classified'
+    #groundtruthNoteDetailPath = '/Users/gong/Documents/pycharmProjects/jingjuSegPic/laosheng/train/refinedSegmentCurvefit/classified'
 
     # classification model path
     pitchContourClassificationModelName = './pYinOut/laosheng/train/model/pitchContourClassificationModel.pkl'
 
     # feature, target folders
-    featureVecTrainFolderPath = './pYinOut/laosheng/train/featureVec/'
-    targetTrainFolderPath = './pYinOut/laosheng/train/target/'
+    #featureVecTrainFolderPath = './pYinOut/laosheng/train/featureVec/'
+    #targetTrainFolderPath = './pYinOut/laosheng/train/target/'
 
     # predict folders
-    pitchtrackNotePredictFolderPath = './pYinOut/laosheng/predict/'
+    #pitchtrackNotePredictFolderPath = './pYinOut/laosheng/predict/'
     featureVecPredictFolderPath = './pYinOut/laosheng/predict/featureVec/'
     targetPredictFolderPath = './pYinOut/laosheng/predict/target/'
 
+    pitchtrackNotePredictFolderPath = mp3Folder
 
-    recordingNamesTrain = ['male_02_neg_1', 'male_12_neg_1', 'male_12_pos_1', 'male_13_pos_1', 'male_13_pos_3']
-    recordingNamesPredict = ['weiguojia_section_pro','weiguojia_section_amateur']
+    #recordingNamesTrain = ['male_02_neg_1', 'male_12_neg_1', 'male_12_pos_1', 'male_13_pos_1', 'male_13_pos_3']
 
     evaluation = False                      #  parameters grid search
 

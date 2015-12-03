@@ -713,7 +713,7 @@ class noteClass(object):
                 # output segments boundary frames pitch contours
                 outJsonDict = {'refinedPitchcontours':refinedPitchcontours,'boundary':segmentsExport,
                                'extremas':extremas,'vibrato':vibrato}
-                with open('./pYinOut/laosheng/predict/'+rn+'_refinedSegmentFeatures.json', "w") as outfile:
+                with open(pitchtrackNoteFolderPath+rn+'_refinedSegmentFeatures.json', "w") as outfile:
                     json.dump(outJsonDict,outfile)
                     # for se in segmentsExport:
                     #     # outfile.write(str(int(se[0]))+'\t'+str(se[1])+'\n')

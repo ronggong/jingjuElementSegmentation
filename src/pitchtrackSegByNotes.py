@@ -97,7 +97,7 @@ class pitchtrackSegByNotes(object):
         :return: frameStartingTime, pitchtrack
         '''
 
-        pitchtrack = np.loadtxt(pitchtrack_filename,delimiter=',')
+        pitchtrack = np.loadtxt(pitchtrack_filename,delimiter=',',usecols=[1,2])
         frameStartingTime = pitchtrack[:,0]
         pitchtrack = pitchtrack[:,1]
 
@@ -110,9 +110,9 @@ class pitchtrackSegByNotes(object):
         :return: noteStartingTime, noteDurationTime
         '''
 
-        monoNoteOut = np.loadtxt(monoNoteOut_filename,delimiter=',',usecols=[0,1,2,3])
+        monoNoteOut = np.loadtxt(monoNoteOut_filename,delimiter=',',usecols=[1,2,3])
         noteStartingTime = monoNoteOut[:,0]
-        noteDurTime = monoNoteOut[:,2]
+        noteDurTime = monoNoteOut[:,1]
 
         return noteStartingTime, noteDurTime
 
@@ -124,10 +124,10 @@ class pitchtrackSegByNotes(object):
         :return: noteStartingTime, noteDurationTime
         '''
 
-        monoNoteOut = np.loadtxt(monoNoteOut_filename,delimiter=',',usecols=[0,1,2,3])
+        monoNoteOut = np.loadtxt(monoNoteOut_filename,delimiter=',',usecols=[1,2,3])
         noteStartingTime = monoNoteOut[:,0]
-        noteDurTime = monoNoteOut[:,2]
-        notePitch = monoNoteOut[:,1]
+        noteDurTime = monoNoteOut[:,1]
+        notePitch = monoNoteOut[:,2]
         notePitchMidi = pitch2midi(notePitch)
 
         with open(monoNoteOutMidi_filename, 'w+') as outfile:
