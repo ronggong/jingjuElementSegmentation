@@ -50,11 +50,11 @@ if __name__ == "__main__":
     start_time = time.time()  # starting time
 
     ######################################### pYIN pitchtrack and notes ################################################
-    mp3Folder = '/Users/gong/Documents/github/MTG/ICASSP2016/exampleAudios/07/' # to be change
+    audioFolder = '/Users/gong/Documents/github/MTG/ICASSP2016/exampleAudios/07/' # to be change
     recordingNamesPredict = ['teacher','student']
 
     for name in recordingNamesPredict:
-        getPtNotes(mp3Folder,name)
+        getPtNotes(audioFolder,name)
 
     ############################################## initialsation #######################################################
     #pitchtrackNoteTrainFolderPath = './pYinOut/laosheng/train/'
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     featureVecPredictFolderPath = './pYinOut/laosheng/predict/featureVec/'
     targetPredictFolderPath = './pYinOut/laosheng/predict/target/'
 
-    pitchtrackNotePredictFolderPath = mp3Folder
+    pitchtrackNotePredictFolderPath = audioFolder
 
     #recordingNamesTrain = ['male_02_neg_1', 'male_12_neg_1', 'male_12_pos_1', 'male_13_pos_1', 'male_13_pos_3']
 
